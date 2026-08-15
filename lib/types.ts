@@ -56,6 +56,8 @@ export type JourneyOption = {
   co2Kg: number;
   estimatedCostEur: number;
   carKmAvoided: number;
+  isStrategicException: boolean;
+  driveLimitExceededBy: number;
   score?: number;
   labels: Array<"recommended" | "greenest" | "fastest" | "cheapest">;
 };

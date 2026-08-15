@@ -60,3 +60,12 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .form-grid, .option-grid { grid-template-columns: 1fr; }
   .results-head { align-items: flex-start; flex-direction: column; }
 }
+
+.strategic-warning {
+  margin: -2px 0 12px;
+  padding: 8px 10px;
+  border: 1px dashed currentColor;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  opacity: 0.86;
+}

@@ -69,9 +69,14 @@ lib/
 ```
 
 
-## V0.1.2
+## V0.1.3
 
 - Ne coupe plus la liste des gares trop tôt avant le calcul routier.
 - Conserve la frontière Pareto mais complète l'affichage jusqu'à 6 alternatives utiles pendant le MVP.
 - Affiche le nombre de gares réellement viables avec la limite de conduite choisie.
 - Corrige notamment le test Courlaoux → Düsseldorf qui pouvait ne montrer que Dijon et Besançon.
+
+
+## V0.1.3 — hubs stratégiques hors rayon
+
+Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préférence forte. Le moteur peut tester quelques grandes gares jusqu'à 120 minutes au-delà de cette préférence si elles sont susceptibles d'ouvrir une meilleure liaison ferroviaire. Ces propositions sont clairement signalées dans l'interface.

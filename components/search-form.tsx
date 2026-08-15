@@ -92,7 +92,7 @@ export default function SearchForm() {
             <input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} required />
           </label>
           <label>
-            <span>Conduite max jusqu'à la gare</span>
+            <span>Conduite préférée max jusqu'à la gare</span>
             <select value={form.maxDriveMinutes} onChange={(e) => setForm({ ...form, maxDriveMinutes: Number(e.target.value) })}>
               <option value={45}>45 min</option>
               <option value={60}>1 h</option>
@@ -111,7 +111,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1 : l'app choisit elle-même la gare stratégique et calcule l'heure de départ en voiture.</p>
+        <p className="form-hint">V0.1.3 : l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -136,6 +136,9 @@ export default function SearchForm() {
                     {option.labels.map((label) => <span key={label}>{labelText[label]}</span>)}
                   </div>
                   <h3>{option.station.name}</h3>
+                  {option.isStrategicException && (
+                    <p className="strategic-warning">⭐ Hub stratégique · +{fmtDuration(option.driveLimitExceededBy)} au-delà de votre préférence</p>
+                  )}
                   <p className="leave-time">Départ conseillé <strong>{fmtTime(option.recommendedDepartureAt)}</strong></p>
                   {form.mode === "arriveBy" && <p className="comfort">Confortable : {fmtTime(option.comfortableDepartureAt)} · limite : {fmtTime(option.latestDepartureAt)}</p>}
 

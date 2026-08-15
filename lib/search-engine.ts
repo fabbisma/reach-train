@@ -39,24 +39,45 @@ function providers(destinationCountry?: string): { road: RoadProvider; rail: Rai
   return { road, rail: new MockRailProvider(), live: false, railName: "simulation" };
 }
 
-function candidateStations(origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, maxDriveMinutes: number) {
+type StationCandidate = {
+  station: Station;
+  strategicException: boolean;
+};
+
+function candidateStations(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  maxDriveMinutes: number,
+  international: boolean
+): StationCandidate[] {
   const direct = haversineKm(origin, destination);
+  const strategicExtraMinutes = international ? 120 : 45;
+
   return STATIONS
     .map((station) => {
       const originKm = haversineKm(origin, station);
       const stationToDest = haversineKm(station, destination);
       const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
       const driveEstimate = (originKm / 75) * 60 + 8;
-      const strategicScore = station.importance * 0.55 + (1 / Math.max(1, detourRatio)) * 0.3 + (1 / Math.max(1, originKm / 30)) * 0.15;
-      return { station, driveEstimate, detourRatio, strategicScore };
+      const withinNormalSearch = driveEstimate <= maxDriveMinutes * 1.35 && detourRatio <= 1.65;
+      // Pour les longs trajets, une grande gare peut être intéressante même au-delà
+      // de la préférence de conduite. On l'évalue alors comme exception stratégique.
+      const strategicException =
+        international &&
+        station.importance >= 0.86 &&
+        driveEstimate <= maxDriveMinutes + strategicExtraMinutes &&
+        detourRatio <= 1.75;
+      const strategicScore =
+        station.importance * 0.55 +
+        (1 / Math.max(1, detourRatio)) * 0.3 +
+        (1 / Math.max(1, originKm / 30)) * 0.15 +
+        (strategicException ? 0.08 : 0);
+      return { station, driveEstimate, detourRatio, strategicScore, strategicException, withinNormalSearch };
     })
-    // Le filtre reste volontairement large : le vrai contrôle de la limite de
-    // conduite se fait ensuite avec le RoadProvider. On évite ainsi de perdre
-    // une gare utile à cause d'une estimation géométrique trop grossière.
-    .filter((x) => x.driveEstimate <= maxDriveMinutes * 1.35 && x.detourRatio <= 1.65)
+    .filter((x) => x.withinNormalSearch || x.strategicException)
     .sort((a, b) => b.strategicScore - a.strategicScore)
-    .slice(0, 14)
-    .map((x) => x.station);
+    .slice(0, 18)
+    .map((x) => ({ station: x.station, strategicException: x.strategicException }));
 }
 
 function estimateImpact(params: { carKm: number; railKm: number; directCarKm: number; vehicleType: SearchRequest["vehicleType"] }) {
@@ -125,8 +146,16 @@ function labelAndSort(options: JourneyOption[], paretoOptions: JourneyOption[]) 
     if (option) selected.set(option.id, option);
   }
 
+  // Toujours montrer jusqu'à trois hubs stratégiques hors préférence de conduite,
+  // afin que l'utilisateur voie qu'une gare plus lointaine a bien été testée.
+  const strategicExceptions = options
+    .filter((x) => x.isStrategicException)
+    .sort((a, b) => a.rail.changes - b.rail.changes || a.totalMinutes - b.totalMinutes || b.station.importance - a.station.importance)
+    .slice(0, 3);
+  for (const option of strategicExceptions) selected.set(option.id, option);
+
   for (const option of [...options].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))) {
-    if (selected.size >= 6) break;
+    if (selected.size >= 8) break;
     selected.set(option.id, option);
   }
 
@@ -136,11 +165,12 @@ function labelAndSort(options: JourneyOption[], paretoOptions: JourneyOption[]) 
       const br = b.id === recommended.id ? -1 : 0;
       return ar - br || (a.score ?? 0) - (b.score ?? 0);
     })
-    .slice(0, 6);
+    .slice(0, 8);
 }
 
 async function buildOption(params: {
   station: Station;
+  strategicException: boolean;
   request: SearchRequest;
   origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
   destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
@@ -150,7 +180,10 @@ async function buildOption(params: {
 }): Promise<JourneyOption | null> {
   const targetIso = zonedLocalToIso(params.request.date, params.request.time);
   const initialRoad = await params.road.route(params.origin, params.station);
-  if (initialRoad.durationMinutes > params.request.maxDriveMinutes) return null;
+  const driveLimitExceededBy = Math.max(0, initialRoad.durationMinutes - params.request.maxDriveMinutes);
+  if (driveLimitExceededBy > 0 && !params.strategicException) return null;
+  // Une exception stratégique reste bornée : on ne propose pas une gare arbitrairement lointaine.
+  if (params.strategicException && driveLimitExceededBy > 120) return null;
 
   if (params.request.mode === "arriveBy") {
     const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: targetIso, mode: "arriveBy" });
@@ -183,6 +216,8 @@ async function buildOption(params: {
       rail,
       bufferMinutes: actualBufferMinutes,
       ...impact,
+      isStrategicException: driveLimitExceededBy > 0,
+      driveLimitExceededBy,
       labels: []
     };
   }
@@ -209,6 +244,8 @@ async function buildOption(params: {
     rail,
     bufferMinutes: STATION_BUFFER_MINUTES,
     ...impact,
+    isStrategicException: driveLimitExceededBy > 0,
+    driveLimitExceededBy,
     labels: []
   };
 }
@@ -222,8 +259,18 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
 
   const { road, rail, live, railName } = providers(destination.countryCode);
   const directRoad = await road.route(origin, destination);
-  const stations = candidateStations(origin, destination, request.maxDriveMinutes);
-  const options = (await Promise.all(stations.map((station) => buildOption({ station, request, origin, destination, road, rail, directRoadKm: directRoad.distanceKm })))).filter((x): x is JourneyOption => Boolean(x));
+  const international = Boolean(destination.countryCode && destination.countryCode !== "FR");
+  const stations = candidateStations(origin, destination, request.maxDriveMinutes, international);
+  const options = (await Promise.all(stations.map((candidate) => buildOption({
+    station: candidate.station,
+    strategicException: candidate.strategicException,
+    request,
+    origin,
+    destination,
+    road,
+    rail,
+    directRoadKm: directRoad.distanceKm
+  })))).filter((x): x is JourneyOption => Boolean(x));
   const paretoOptions = pareto(options);
 
   return {
@@ -235,11 +282,12 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     viableStationCount: options.length,
     paretoStationCount: paretoOptions.length,
     notes: live
-      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.2."]
+      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.3."]
       : destination.countryCode && destination.countryCode !== "FR"
         ? [
             "Mode démo international : horaires ferroviaires simulés tant que TRANSITOUS_CONTACT n'est pas renseigné.",
             "Pour un trajet France → Allemagne, Transitous/MOTIS sera utilisé pour le rail transfrontalier.",
+            "Les grands hubs peuvent être testés jusqu'à 2 h au-delà de votre préférence de conduite et sont signalés comme exceptions stratégiques.",
             "Ajoutez TRANSITOUS_CONTACT (URL de votre site ou e-mail) et GOOGLE_MAPS_API_KEY dans Vercel pour passer aux données réelles."
           ]
         : [

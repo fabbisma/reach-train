@@ -52,6 +52,13 @@ export type RailLeg = {
   transfers?: RailTransfer[];
 };
 
+export type RecommendationCriterion = "closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal";
+
+export type RecommendationBadge = {
+  criterion: RecommendationCriterion;
+  rank: 1 | 2 | 3;
+};
+
 export type JourneyOption = {
   id: string;
   station: Station;
@@ -72,7 +79,7 @@ export type JourneyOption = {
   driveLimitExceededBy: number;
   score?: number;
   departureDay: "requestedDay" | "previousDay";
-  labels: Array<"closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal">;
+  labels: RecommendationBadge[];
   warnings: string[];
 };
 

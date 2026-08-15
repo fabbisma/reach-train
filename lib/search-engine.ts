@@ -4,7 +4,7 @@ import { NavitiaRailProvider } from "@/lib/providers/navitia";
 import { TransitousRailProvider } from "@/lib/providers/transitous";
 import type { RailProvider, RoadProvider } from "@/lib/providers/types";
 import { resolveKnownPlace, STATIONS } from "@/lib/stations";
-import type { JourneyOption, RailLeg, SearchRequest, SearchResponse, Station } from "@/lib/types";
+import type { JourneyOption, RailLeg, RecommendationBadge, RecommendationCriterion, SearchRequest, SearchResponse, Station } from "@/lib/types";
 import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/utils";
 
 const STATION_BUFFER_MINUTES = 22;
@@ -318,19 +318,23 @@ async function evaluateStation(params: {
   return selected;
 }
 
-type RecommendationLabel = JourneyOption["labels"][number];
+type RecommendationRank = RecommendationBadge["rank"];
 
 function mergeRecommendation(
   result: JourneyOption[],
   option: JourneyOption,
-  label: RecommendationLabel,
+  criterion: RecommendationCriterion,
+  rank: RecommendationRank,
   request: SearchRequest
 ) {
-  // Une même gare peut gagner plusieurs critères. On garde une seule carte
-  // par gare et par jour, puis on cumule simplement les badges.
+  // Une même gare peut être classée dans plusieurs critères/rangs. On garde
+  // une seule carte par gare et par jour, avec tous ses badges de classement.
   const existing = result.find((item) => item.station.id === option.station.id);
   if (existing) {
-    if (!existing.labels.includes(label)) existing.labels.push(label);
+    if (!existing.labels.some((badge) => badge.criterion === criterion && badge.rank === rank)) {
+      existing.labels.push({ criterion, rank });
+    }
+    existing.labels.sort((a, b) => a.rank - b.rank || a.criterion.localeCompare(b.criterion));
     existing.warnings = warningsFor(existing, request);
     return;
   }
@@ -338,11 +342,22 @@ function mergeRecommendation(
   const merged: JourneyOption = {
     ...option,
     id: `${option.id}-summary`,
-    labels: [label],
+    labels: [{ criterion, rank }],
     warnings: []
   };
   merged.warnings = warningsFor(merged, request);
   result.push(merged);
+}
+
+function addTopThree(
+  result: JourneyOption[],
+  ranked: JourneyOption[],
+  criterion: RecommendationCriterion,
+  request: SearchRequest
+) {
+  ranked.slice(0, 3).forEach((option, index) => {
+    mergeRecommendation(result, option, criterion, (index + 1) as RecommendationRank, request);
+  });
 }
 
 function summarizeDay(options: JourneyOption[], request: SearchRequest) {
@@ -350,41 +365,62 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
 
   const result: JourneyOption[] = [];
 
-  const closest = [...options].sort((a, b) =>
-    a.drive.durationMinutes - b.drive.durationMinutes ||
-    a.drive.distanceKm - b.drive.distanceKm ||
-    a.totalMinutes - b.totalMinutes
-  )[0];
-  mergeRecommendation(result, closest, "closestStation", request);
+  addTopThree(
+    result,
+    [...options].sort((a, b) =>
+      a.drive.durationMinutes - b.drive.durationMinutes ||
+      a.drive.distanceKm - b.drive.distanceKm ||
+      a.totalMinutes - b.totalMinutes
+    ),
+    "closestStation",
+    request
+  );
 
   const withinLimit = options.filter((option) => option.drive.durationMinutes <= request.maxDriveMinutes);
   if (withinLimit.length) {
-    const fastestRailWithin = [...withinLimit].sort((a, b) =>
-      a.rail.durationMinutes - b.rail.durationMinutes ||
-      a.rail.changes - b.rail.changes ||
-      a.totalMinutes - b.totalMinutes
-    )[0];
-    mergeRecommendation(result, fastestRailWithin, "fastestRailWithinLimit", request);
+    addTopThree(
+      result,
+      [...withinLimit].sort((a, b) =>
+        a.rail.durationMinutes - b.rail.durationMinutes ||
+        a.rail.changes - b.rail.changes ||
+        a.totalMinutes - b.totalMinutes
+      ),
+      "fastestRailWithinLimit",
+      request
+    );
   }
 
   const extended = options.filter((option) => option.drive.durationMinutes > request.maxDriveMinutes);
   if (extended.length) {
-    const fastestRailExtended = [...extended].sort((a, b) =>
-      a.rail.durationMinutes - b.rail.durationMinutes ||
-      a.rail.changes - b.rail.changes ||
-      a.drive.durationMinutes - b.drive.durationMinutes
-    )[0];
-    mergeRecommendation(result, fastestRailExtended, "fastestRailExtended", request);
+    addTopThree(
+      result,
+      [...extended].sort((a, b) =>
+        a.rail.durationMinutes - b.rail.durationMinutes ||
+        a.rail.changes - b.rail.changes ||
+        a.drive.durationMinutes - b.drive.durationMinutes
+      ),
+      "fastestRailExtended",
+      request
+    );
   }
 
-  const fastestTotal = [...options].sort((a, b) =>
-    a.totalMinutes - b.totalMinutes ||
-    a.rail.changes - b.rail.changes ||
-    a.drive.durationMinutes - b.drive.durationMinutes
-  )[0];
-  mergeRecommendation(result, fastestTotal, "fastestTotal", request);
+  addTopThree(
+    result,
+    [...options].sort((a, b) =>
+      a.totalMinutes - b.totalMinutes ||
+      a.rail.changes - b.rail.changes ||
+      a.drive.durationMinutes - b.drive.durationMinutes
+    ),
+    "fastestTotal",
+    request
+  );
 
-  return result;
+  // Les cartes ayant un meilleur classement global apparaissent en premier.
+  return result.sort((a, b) => {
+    const bestRankA = Math.min(...a.labels.map((label) => label.rank));
+    const bestRankB = Math.min(...b.labels.map((label) => label.rank));
+    return bestRankA - bestRankB || b.labels.length - a.labels.length || a.totalMinutes - b.totalMinutes;
+  });
 }
 
 function simplePareto(options: JourneyOption[]) {
@@ -450,7 +486,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const uniqueFailures = [...new Set(failures)];
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
-  notes.push("Les quatre critères sont calculés indépendamment : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
+  notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
   if (request.mode === "arriveBy") notes.push("Les mêmes critères sont affichés séparément pour un départ le jour J et pour un départ la veille lorsqu'une solution existe.");
   notes.push(`Les gares peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");

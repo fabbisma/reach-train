@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { SearchRequest, SearchResponse } from "@/lib/types";
+import type { RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
 
 function tomorrowLocal() {
   const d = new Date();
@@ -37,8 +37,9 @@ const labelText = {
   fastestTotal: "🏁 Trajet total le plus court"
 } as const;
 
-function recommendationLabel(label: SearchResponse["options"][number]["labels"][number]) {
-  return labelText[label];
+function recommendationLabel(label: RecommendationBadge) {
+  const medal = label.rank === 1 ? "🥇" : label.rank === 2 ? "🥈" : "🥉";
+  return `${medal} ${labelText[label.criterion]}`;
 }
 
 export default function SearchForm() {
@@ -129,7 +130,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.5 : 4 critères indépendants sont comparés pour le jour J et la veille. Une gare gagnant plusieurs critères n’apparaît qu’une fois avec plusieurs badges.</p>
+        <p className="form-hint">V0.2.6 : les 3 meilleurs candidats de chacun des 4 critères sont proposés pour le jour J et la veille. Les doublons sont regroupés sur une seule carte.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -179,7 +180,7 @@ export default function SearchForm() {
                         {groupOptions.map((option) => (
                 <article className="option-card" key={option.id}>
                   <div className="badges">
-                    {option.labels.map((label) => <span key={label}>{recommendationLabel(label)}</span>)}
+                    {option.labels.map((label) => <span key={`${label.criterion}-${label.rank}`}>{recommendationLabel(label)}</span>)}
                   </div>
                   <h3>{option.station.name}</h3>
                   {option.warnings.length > 0 && (
@@ -228,7 +229,7 @@ export default function SearchForm() {
           )}
 
           <div className="notes">
-            <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; seules les meilleures synthèses sont affichées.</p>
+            <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; les 3 meilleurs candidats par critère sont affichés, avec déduplication des gares.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

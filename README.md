@@ -186,3 +186,10 @@ Le nombre de correspondances n'est plus un filtre utilisateur : jusqu'à 3 sont 
 - Une gare n’est affichée qu’une seule fois par section (Jour J / Veille).
 - Si elle gagne plusieurs critères, les badges sont cumulés sur la même carte.
 - Les quatre critères restent calculés indépendamment ; seul l’affichage est dédoublonné.
+
+
+## V0.2.6 — top 3 par critère
+
+- Affiche les 1er, 2e et 3e meilleurs candidats pour chacun des quatre critères, pour le jour J et la veille.
+- Les rangs sont indiqués par 🥇, 🥈 et 🥉.
+- Une même gare n’apparaît toujours qu’une fois par jour, même si elle est classée dans plusieurs critères.

@@ -10,19 +10,35 @@ import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/
 const STATION_BUFFER_MINUTES = 22;
 const COMFORT_EXTRA_MINUTES = 10;
 
-function providers(destinationCountry?: string): { road: RoadProvider; rail: RailProvider; live: boolean; railName: string } {
+function transitousContact() {
+  if (process.env.TRANSITOUS_CONTACT) return process.env.TRANSITOUS_CONTACT;
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  return host ? `https://${host}` : undefined;
+}
+
+function providers(destinationCountry?: string): {
+  road: RoadProvider;
+  rail: RailProvider;
+  roadLive: boolean;
+  railLive: boolean;
+  roadName: string;
+  railName: string;
+} {
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
   const navitiaToken = process.env.NAVITIA_TOKEN;
-  const transitousContact = process.env.TRANSITOUS_CONTACT;
+  const contact = transitousContact();
   const international = Boolean(destinationCountry && destinationCountry !== "FR");
 
   const road = googleKey ? new GoogleRoutesProvider(googleKey) : new MockRoadProvider();
+  const roadLive = Boolean(googleKey);
 
-  if (international && transitousContact) {
+  if (international && contact) {
     return {
       road,
-      rail: new TransitousRailProvider(transitousContact),
-      live: Boolean(googleKey),
+      rail: new TransitousRailProvider(contact),
+      roadLive,
+      railLive: true,
+      roadName: roadLive ? "Google Routes" : "Simulation routière",
       railName: "Transitous/MOTIS"
     };
   }
@@ -31,12 +47,21 @@ function providers(destinationCountry?: string): { road: RoadProvider; rail: Rai
     return {
       road,
       rail: new NavitiaRailProvider(navitiaToken),
-      live: Boolean(googleKey),
+      roadLive,
+      railLive: true,
+      roadName: roadLive ? "Google Routes" : "Simulation routière",
       railName: "Navitia"
     };
   }
 
-  return { road, rail: new MockRailProvider(), live: false, railName: "simulation" };
+  return {
+    road,
+    rail: new MockRailProvider(),
+    roadLive,
+    railLive: false,
+    roadName: roadLive ? "Google Routes" : "Simulation routière",
+    railName: "Simulation ferroviaire"
+  };
 }
 
 type StationCandidate = {
@@ -53,31 +78,44 @@ function candidateStations(
   const direct = haversineKm(origin, destination);
   const strategicExtraMinutes = international ? 120 : 45;
 
-  return STATIONS
-    .map((station) => {
-      const originKm = haversineKm(origin, station);
-      const stationToDest = haversineKm(station, destination);
-      const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
-      const driveEstimate = (originKm / 75) * 60 + 8;
-      const withinNormalSearch = driveEstimate <= maxDriveMinutes * 1.35 && detourRatio <= 1.65;
-      // Pour les longs trajets, une grande gare peut être intéressante même au-delà
-      // de la préférence de conduite. On l'évalue alors comme exception stratégique.
-      const strategicException =
-        international &&
-        station.importance >= 0.86 &&
-        driveEstimate <= maxDriveMinutes + strategicExtraMinutes &&
-        detourRatio <= 1.75;
-      const strategicScore =
-        station.importance * 0.55 +
-        (1 / Math.max(1, detourRatio)) * 0.3 +
-        (1 / Math.max(1, originKm / 30)) * 0.15 +
-        (strategicException ? 0.08 : 0);
-      return { station, driveEstimate, detourRatio, strategicScore, strategicException, withinNormalSearch };
-    })
-    .filter((x) => x.withinNormalSearch || x.strategicException)
+  const ranked = STATIONS.map((station) => {
+    const originKm = haversineKm(origin, station);
+    const stationToDest = haversineKm(station, destination);
+    const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
+    const driveEstimate = (originKm / 75) * 60 + 8;
+    const withinNormalSearch = driveEstimate <= maxDriveMinutes * 1.35 && detourRatio <= 1.65;
+    const strategicException =
+      international &&
+      station.importance >= 0.86 &&
+      driveEstimate <= maxDriveMinutes + strategicExtraMinutes &&
+      detourRatio <= 1.75;
+    const strategicScore =
+      station.importance * 0.55 +
+      (1 / Math.max(1, detourRatio)) * 0.3 +
+      (1 / Math.max(1, originKm / 30)) * 0.15 +
+      (strategicException ? 0.08 : 0);
+    return { station, strategicScore, strategicException, withinNormalSearch };
+  });
+
+  // Limiter volontairement le nombre de recherches ferroviaires externes :
+  // 6 gares normales + 3 grands hubs hors préférence. Cela garde Bâle/Mulhouse
+  // dans le test international sans lancer une vingtaine de routages MOTIS.
+  const selected = new Map<string, StationCandidate>();
+  for (const item of ranked
+    .filter((x) => x.withinNormalSearch)
     .sort((a, b) => b.strategicScore - a.strategicScore)
-    .slice(0, 18)
-    .map((x) => ({ station: x.station, strategicException: x.strategicException }));
+    .slice(0, 6)) {
+    selected.set(item.station.id, { station: item.station, strategicException: false });
+  }
+
+  for (const item of ranked
+    .filter((x) => x.strategicException && !x.withinNormalSearch)
+    .sort((a, b) => b.strategicScore - a.strategicScore)
+    .slice(0, 3)) {
+    selected.set(item.station.id, { station: item.station, strategicException: true });
+  }
+
+  return [...selected.values()];
 }
 
 function estimateImpact(params: { carKm: number; railKm: number; directCarKm: number; vehicleType: SearchRequest["vehicleType"] }) {
@@ -257,11 +295,12 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     throw new Error("DEMO_PLACE_NOT_FOUND");
   }
 
-  const { road, rail, live, railName } = providers(destination.countryCode);
+  const { road, rail, roadLive, railLive, roadName, railName } = providers(destination.countryCode);
   const directRoad = await road.route(origin, destination);
   const international = Boolean(destination.countryCode && destination.countryCode !== "FR");
   const stations = candidateStations(origin, destination, request.maxDriveMinutes, international);
-  const options = (await Promise.all(stations.map((candidate) => buildOption({
+  const failures: string[] = [];
+  const settled = await Promise.allSettled(stations.map((candidate) => buildOption({
     station: candidate.station,
     strategicException: candidate.strategicException,
     request,
@@ -270,30 +309,45 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     road,
     rail,
     directRoadKm: directRoad.distanceKm
-  })))).filter((x): x is JourneyOption => Boolean(x));
+  })));
+  const options: JourneyOption[] = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      if (result.value) options.push(result.value);
+      return;
+    }
+    failures.push(stations[index]?.station.name ?? `gare ${index + 1}`);
+    console.error(`Échec API pour ${stations[index]?.station.name}:`, result.reason);
+  });
   const paretoOptions = pareto(options);
 
+  const mode: SearchResponse["mode"] = roadLive && railLive ? "live" : roadLive || railLive ? "hybrid" : "demo";
+  const notes: string[] = [];
+  if (railLive && destination.countryCode && destination.countryCode !== "FR") {
+    notes.push("Horaires ferroviaires réels fournis par Transitous/MOTIS (données publiques européennes).");
+  }
+  if (!roadLive) {
+    notes.push("Temps voiture encore simulés : ajoutez GOOGLE_MAPS_API_KEY dans Vercel pour activer Google Routes.");
+  } else {
+    notes.push("Temps voiture calculés par Google Routes, avec trafic lorsque l'heure de départ est connue.");
+  }
+  if (failures.length) {
+    notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
+  }
+  notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
+
   return {
-    mode: live ? "live" : "demo",
+    mode,
     request,
     origin,
     destination,
     options: labelAndSort(options, paretoOptions),
     viableStationCount: options.length,
     paretoStationCount: paretoOptions.length,
-    notes: live
-      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.3."]
-      : destination.countryCode && destination.countryCode !== "FR"
-        ? [
-            "Mode démo international : horaires ferroviaires simulés tant que TRANSITOUS_CONTACT n'est pas renseigné.",
-            "Pour un trajet France → Allemagne, Transitous/MOTIS sera utilisé pour le rail transfrontalier.",
-            "Les grands hubs peuvent être testés jusqu'à 2 h au-delà de votre préférence de conduite et sont signalés comme exceptions stratégiques.",
-            "Ajoutez TRANSITOUS_CONTACT (URL de votre site ou e-mail) et GOOGLE_MAPS_API_KEY dans Vercel pour passer aux données réelles."
-          ]
-        : [
-            "Mode démo : horaires et temps routiers simulés.",
-            "Ajoutez NAVITIA_TOKEN et GOOGLE_MAPS_API_KEY pour activer les providers réels en France.",
-            "Le mode démo reconnaît notamment Courlaoux, Paris, Lyon, Bordeaux, Seignosse et Düsseldorf."
-          ]
+    providers: {
+      road: { name: roadName, live: roadLive },
+      rail: { name: railName, live: railLive }
+    },
+    notes
   };
 }

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "DEMO_PLACE_NOT_FOUND") {
       return Response.json(
-        { error: "Ce lieu n'est pas encore reconnu en mode démo. Essaie Courlaoux → Paris, ou ajoute les clés API pour passer en mode réel." },
+        { error: "Ce lieu n'est pas encore reconnu dans ce prototype. Pour ce test, essaie Courlaoux → Düsseldorf." },
         { status: 422 }
       );
     }

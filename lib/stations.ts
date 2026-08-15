@@ -26,8 +26,8 @@ const KNOWN_PLACES: Record<string, Place> = {
   "seignosse": { name: "Seignosse", lat: 43.689, lng: -1.3746, countryCode: "FR" },
   "villefranche-sur-saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197, countryCode: "FR" },
   "villefranche sur saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197, countryCode: "FR" },
-  "dusseldorf": { name: "Düsseldorf", lat: 51.2277, lng: 6.7735, countryCode: "DE" },
-  "düsseldorf": { name: "Düsseldorf", lat: 51.2277, lng: 6.7735, countryCode: "DE" }
+  "dusseldorf": { name: "Düsseldorf", lat: 51.2203, lng: 6.7928, countryCode: "DE" },
+  "düsseldorf": { name: "Düsseldorf", lat: 51.2203, lng: 6.7928, countryCode: "DE" }
 };
 
 function normalize(value: string) {

@@ -80,3 +80,12 @@ lib/
 ## V0.1.3 — hubs stratégiques hors rayon
 
 Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préférence forte. Le moteur peut tester quelques grandes gares jusqu'à 120 minutes au-delà de cette préférence si elles sont susceptibles d'ouvrir une meilleure liaison ferroviaire. Ces propositions sont clairement signalées dans l'interface.
+
+## V0.1.4 — premier test API réel
+
+- Pour les destinations hors de France, Transitous/MOTIS est activé automatiquement sur Vercel grâce à l'URL publique du projet utilisée comme contact `User-Agent`.
+- Le mode de recherche `Arriver avant` utilise `arriveBy=true` sur l'API MOTIS v6.
+- L'interface distingue maintenant clairement les providers réels et simulés.
+- `GOOGLE_MAPS_API_KEY` est facultative pour le premier test : sans elle, le rail est réel et la route voiture reste simulée (`mode hybride`).
+- Avec `GOOGLE_MAPS_API_KEY`, le test Courlaoux → Düsseldorf passe en données réelles pour le rail et la route.
+- Le nombre de requêtes Transitous est volontairement limité à 6 gares normales + 3 hubs stratégiques au maximum.

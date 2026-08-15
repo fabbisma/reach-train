@@ -66,6 +66,12 @@ export default function SearchForm() {
     }
   }
 
+  const modeLabel = result?.mode === "live"
+    ? "DONNÉES RÉELLES"
+    : result?.mode === "hybrid"
+      ? "DONNÉES PARTIELLEMENT RÉELLES"
+      : "MODE DÉMO";
+
   return (
     <>
       <form className="search-card" onSubmit={submit}>
@@ -111,7 +117,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.3 : l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
+        <p className="form-hint">V0.1.4 : l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -120,10 +126,15 @@ export default function SearchForm() {
         <section className="results">
           <div className="results-head">
             <div>
-              <p className="eyebrow">{result.mode === "demo" ? "MODE DÉMO" : "DONNÉES RÉELLES"}</p>
+              <p className="eyebrow">{modeLabel}</p>
               <h2>{result.origin.name} → {result.destination.name}</h2>
             </div>
             <span className="result-count">{result.options.length} affichées · {result.viableStationCount} gares viables</span>
+          </div>
+
+          <div className="provider-status">
+            <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
+            <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
           </div>
 
           {result.options.length === 0 ? (
@@ -145,7 +156,8 @@ export default function SearchForm() {
                   <div className="timeline">
                     <div><span>🚗</span><p><b>{fmtTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
                     <div><span>🅿️</span><p><b>{fmtTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
-                    <div><span>🚆</span><p><b>{fmtTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}</small></p></div>
+                    <div><span>🚆</span><p><b>{fmtTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
+                      {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}</p></div>
                     <div><span>📍</span><p><b>{fmtTime(option.destinationArrivalAt)}</b> arrivée</p></div>
                   </div>
 

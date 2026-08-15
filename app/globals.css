@@ -69,3 +69,25 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   font-size: 0.86rem;
   opacity: 0.86;
 }
+
+.provider-status {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 18px;
+}
+
+.provider-status span {
+  border: 1px solid #dbe4df;
+  background: #fff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 0.86rem;
+  color: #31423a;
+}
+
+.services {
+  display: block;
+  margin-top: 3px;
+  color: #52645b;
+}

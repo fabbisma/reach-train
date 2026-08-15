@@ -38,6 +38,8 @@ export type RailLeg = {
   departureAt: string;
   arrivalAt: string;
   changes: number;
+  services?: string[];
+  realtime?: boolean;
 };
 
 export type JourneyOption = {
@@ -62,13 +64,22 @@ export type JourneyOption = {
   labels: Array<"recommended" | "greenest" | "fastest" | "cheapest">;
 };
 
+export type ProviderStatus = {
+  name: string;
+  live: boolean;
+};
+
 export type SearchResponse = {
-  mode: "demo" | "live";
+  mode: "demo" | "hybrid" | "live";
   request: SearchRequest;
   origin: Place;
   destination: Place;
   options: JourneyOption[];
   viableStationCount: number;
   paretoStationCount: number;
+  providers: {
+    road: ProviderStatus;
+    rail: ProviderStatus;
+  };
   notes: string[];
 };

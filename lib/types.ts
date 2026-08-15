@@ -81,6 +81,13 @@ export type ProviderStatus = {
   live: boolean;
 };
 
+export type SearchAdjustment = {
+  kind: "none" | "moreDrive" | "laterArrival" | "previousDay";
+  driveExtensionMinutes: number;
+  arrivalShiftMinutes: number;
+  message: string;
+};
+
 export type SearchResponse = {
   mode: "demo" | "hybrid" | "live";
   request: SearchRequest;
@@ -93,5 +100,6 @@ export type SearchResponse = {
     road: ProviderStatus;
     rail: ProviderStatus;
   };
+  adjustment: SearchAdjustment;
   notes: string[];
 };

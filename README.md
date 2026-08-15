@@ -1,4 +1,4 @@
-# EcoRail Planner — V0.1.5
+# EcoRail Planner — V0.2.0
 
 MVP d'un planificateur multimodal qui choisit automatiquement une gare stratégique entre le départ et la destination, puis calcule l'heure conseillée de départ en voiture.
 
@@ -129,3 +129,16 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - En mode **Arriver avant**, ajoute **🎯 Arrivée la plus proche** : parmi les trajets dont le temps total reste compétitif (au plus +12 % ou +30 min par rapport au meilleur), choisit celui qui arrive le plus près de l’heure demandée.
 - Ajoute des remarques d’inconvénient sur les cartes : **Partir la veille**, **Transit long**, **Transit serré**, **Voiture au-dessus de la limite**, **Arrivée très en avance**.
 - Une même proposition peut cumuler plusieurs badges de recommandation sans être affichée deux fois.
+
+## V0.2.0 — priorité au départ le jour demandé
+
+- En mode **Arriver avant**, l'app n'affiche plus par défaut des départs la veille si une alternative le jour même existe.
+- Ordre de repli automatique :
+  1. respecter l'heure d'arrivée et la préférence voiture ;
+  2. tester davantage de voiture, jusqu'à +2 h ;
+  3. si nécessaire, chercher la première arrivée réellement atteignable en partant le jour demandé ;
+  4. n'afficher la veille qu'en dernier recours.
+- Le moteur corrige aussi le classement ferroviaire : un direct de la veille ne masque plus automatiquement un trajet avec correspondance le jour même lorsque le filtre autorise cette correspondance.
+- Les gares réellement les plus proches sont désormais toujours conservées parmi les candidates, même si de grands hubs obtiennent un meilleur score stratégique.
+- Quand l'heure d'arrivée doit être dépassée, chaque carte indique précisément le retard par rapport à l'heure souhaitée.
+- Un bandeau explique quand la recherche a été automatiquement élargie (plus de voiture, arrivée plus tardive, ou veille en dernier recours).

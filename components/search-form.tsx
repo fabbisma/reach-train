@@ -138,7 +138,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.9 : en mode “Arriver avant”, l’app ajoute une sélection qui arrive au plus près de l’heure demandée sans dégrader fortement le temps total. Les dates et les inconvénients sont affichés clairement.</p>
+        <p className="form-hint">V0.2.0 : l’app privilégie un départ le jour demandé. Si nécessaire, elle teste d’abord davantage de voiture, puis une arrivée plus tardive ; la veille n’est proposée qu’en dernier recours.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -158,6 +158,13 @@ export default function SearchForm() {
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 {result.request.maxTransfers === 0 ? "Direct uniquement" : `${result.request.maxTransfers} correspondance${result.request.maxTransfers > 1 ? "s" : ""} max`}</span>
           </div>
+
+          {result.adjustment.kind !== "none" && (
+            <div className={`adjustment-box ${result.adjustment.kind}`}>
+              <strong>{result.adjustment.kind === "previousDay" ? "⚠️ Aucun départ le jour même" : "↪️ Recherche adaptée automatiquement"}</strong>
+              <span>{result.adjustment.message}</span>
+            </div>
+          )}
 
           {result.options.length === 0 ? (
             <div className="empty">Aucune gare intéressante trouvée avec cette limite de conduite.</div>

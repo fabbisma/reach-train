@@ -67,28 +67,32 @@ function providers(destinationCountry?: string): {
 type StationCandidate = {
   station: Station;
   strategicException: boolean;
+  allowedDriveMinutes: number;
 };
 
 function candidateStations(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
   maxDriveMinutes: number,
-  international: boolean
+  international: boolean,
+  expanded = false
 ): StationCandidate[] {
   const direct = haversineKm(origin, destination);
-  const strategicExtraMinutes = international ? 120 : 45;
+  const expandedLimit = maxDriveMinutes + (expanded ? 120 : 0);
+  const strategicExtraMinutes = international && !expanded ? 120 : !expanded ? 45 : 0;
 
   const ranked = STATIONS.map((station) => {
     const originKm = haversineKm(origin, station);
     const stationToDest = haversineKm(station, destination);
     const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
     const driveEstimate = (originKm / 75) * 60 + 8;
-    const withinNormalSearch = driveEstimate <= maxDriveMinutes * 1.35 && detourRatio <= 1.65;
+    const withinNormalSearch = driveEstimate <= expandedLimit * 1.35 && detourRatio <= 1.7;
     const strategicException =
       international &&
+      !expanded &&
       station.importance >= 0.86 &&
       driveEstimate <= maxDriveMinutes + strategicExtraMinutes &&
-      detourRatio <= 1.75;
+      detourRatio <= 1.8;
     const strategicScore =
       station.importance * 0.55 +
       (1 / Math.max(1, detourRatio)) * 0.3 +
@@ -97,22 +101,42 @@ function candidateStations(
     return { station, strategicScore, strategicException, withinNormalSearch };
   });
 
-  // Limiter volontairement le nombre de recherches ferroviaires externes :
-  // 6 gares normales + 3 grands hubs hors préférence. Cela garde Bâle/Mulhouse
-  // dans le test international sans lancer une vingtaine de routages MOTIS.
   const selected = new Map<string, StationCandidate>();
-  for (const item of ranked
-    .filter((x) => x.withinNormalSearch)
+  const normalCount = expanded ? 10 : 6;
+  const normalItems = ranked.filter((x) => x.withinNormalSearch);
+  for (const item of normalItems
     .sort((a, b) => b.strategicScore - a.strategicScore)
-    .slice(0, 6)) {
-    selected.set(item.station.id, { station: item.station, strategicException: false });
+    .slice(0, normalCount)) {
+    selected.set(item.station.id, {
+      station: item.station,
+      strategicException: expanded && ((haversineKm(origin, item.station) / 75) * 60 + 8 > maxDriveMinutes),
+      allowedDriveMinutes: expanded ? maxDriveMinutes + 120 : maxDriveMinutes
+    });
   }
 
-  for (const item of ranked
-    .filter((x) => x.strategicException && !x.withinNormalSearch)
-    .sort((a, b) => b.strategicScore - a.strategicScore)
-    .slice(0, 3)) {
-    selected.set(item.station.id, { station: item.station, strategicException: true });
+  // Toujours conserver les gares réellement les plus proches : sinon un gros
+  // hub mieux noté pourrait faire disparaître Lons/Dole avant même le calcul.
+  for (const item of [...normalItems]
+    .sort((a, b) => haversineKm(origin, a.station) - haversineKm(origin, b.station))
+    .slice(0, 2)) {
+    selected.set(item.station.id, {
+      station: item.station,
+      strategicException: expanded && ((haversineKm(origin, item.station) / 75) * 60 + 8 > maxDriveMinutes),
+      allowedDriveMinutes: expanded ? maxDriveMinutes + 120 : maxDriveMinutes
+    });
+  }
+
+  if (!expanded) {
+    for (const item of ranked
+      .filter((x) => x.strategicException && !x.withinNormalSearch)
+      .sort((a, b) => b.strategicScore - a.strategicScore)
+      .slice(0, 3)) {
+      selected.set(item.station.id, {
+        station: item.station,
+        strategicException: true,
+        allowedDriveMinutes: maxDriveMinutes + strategicExtraMinutes
+      });
+    }
   }
 
   return [...selected.values()];
@@ -180,8 +204,15 @@ function warningsFor(option: JourneyOption, request: SearchRequest) {
 
   if (request.mode === "arriveBy") {
     const target = zonedLocalToIso(request.date, request.time);
-    const earlyBy = Math.max(0, minutesBetween(option.destinationArrivalAt, target));
-    if (earlyBy >= 90) warnings.push(`Arrivée ${compactDuration(earlyBy)} en avance`);
+    const targetMs = new Date(target).getTime();
+    const arrivalMs = new Date(option.destinationArrivalAt).getTime();
+    if (arrivalMs > targetMs) {
+      const lateBy = minutesBetween(target, option.destinationArrivalAt);
+      warnings.push(`Arrivée +${compactDuration(lateBy)} après l'heure souhaitée`);
+    } else {
+      const earlyBy = minutesBetween(option.destinationArrivalAt, target);
+      if (earlyBy >= 90) warnings.push(`Arrivée ${compactDuration(earlyBy)} en avance`);
+    }
   }
 
   return warnings.slice(0, 3);
@@ -242,8 +273,8 @@ function summarizeOptions(options: JourneyOption[], request: SearchRequest) {
     const interesting = options.filter((option) => option.totalMinutes <= fastestTotal + tolerance);
 
     bestArrivalFit = [...interesting].sort((a, b) => {
-      const gapA = Math.max(0, targetMs - new Date(a.destinationArrivalAt).getTime());
-      const gapB = Math.max(0, targetMs - new Date(b.destinationArrivalAt).getTime());
+      const gapA = Math.abs(targetMs - new Date(a.destinationArrivalAt).getTime());
+      const gapB = Math.abs(targetMs - new Date(b.destinationArrivalAt).getTime());
       return gapA - gapB || a.totalMinutes - b.totalMinutes || a.rail.changes - b.rail.changes;
     })[0];
   }
@@ -271,6 +302,8 @@ function summarizeOptions(options: JourneyOption[], request: SearchRequest) {
 async function buildOption(params: {
   station: Station;
   strategicException: boolean;
+  allowedDriveMinutes: number;
+  searchAtIso?: string;
   request: SearchRequest;
   origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
   destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
@@ -278,12 +311,10 @@ async function buildOption(params: {
   rail: RailProvider;
   directRoadKm: number;
 }): Promise<JourneyOption | null> {
-  const targetIso = zonedLocalToIso(params.request.date, params.request.time);
+  const targetIso = params.searchAtIso ?? zonedLocalToIso(params.request.date, params.request.time);
   const initialRoad = await params.road.route(params.origin, params.station);
   const driveLimitExceededBy = Math.max(0, initialRoad.durationMinutes - params.request.maxDriveMinutes);
-  if (driveLimitExceededBy > 0 && !params.strategicException) return null;
-  // Une exception stratégique reste bornée : on ne propose pas une gare arbitrairement lointaine.
-  if (params.strategicException && driveLimitExceededBy > 120) return null;
+  if (initialRoad.durationMinutes > params.allowedDriveMinutes) return null;
 
   if (params.request.mode === "arriveBy") {
     const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: targetIso, mode: "arriveBy", maxTransfers: params.request.maxTransfers });
@@ -352,6 +383,166 @@ async function buildOption(params: {
   };
 }
 
+async function buildEarliestSameDayOption(params: {
+  station: Station;
+  allowedDriveMinutes: number;
+  request: SearchRequest;
+  origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  road: RoadProvider;
+  rail: RailProvider;
+  directRoadKm: number;
+}): Promise<JourneyOption | null> {
+  const dayStartIso = zonedLocalToIso(params.request.date, "00:00");
+  const initialRoad = await params.road.route(params.origin, params.station, dayStartIso);
+  const driveLimitExceededBy = Math.max(0, initialRoad.durationMinutes - params.request.maxDriveMinutes);
+  if (initialRoad.durationMinutes > params.allowedDriveMinutes) return null;
+
+  const earliestTrainAt = addMinutes(dayStartIso, initialRoad.durationMinutes + STATION_BUFFER_MINUTES);
+  const rail = await params.rail.journey({
+    station: params.station,
+    destination: params.destination,
+    searchAt: earliestTrainAt,
+    mode: "departAt",
+    maxTransfers: params.request.maxTransfers
+  });
+  if (!rail) return null;
+
+  const latestStationArrivalAt = addMinutes(rail.departureAt, -STATION_BUFFER_MINUTES);
+  let latestDepartureAt = addMinutes(latestStationArrivalAt, -initialRoad.durationMinutes);
+  const roadAtLatest = await params.road.route(params.origin, params.station, latestDepartureAt);
+  latestDepartureAt = addMinutes(latestStationArrivalAt, -roadAtLatest.durationMinutes);
+
+  let recommendedDepartureAt = addMinutes(latestDepartureAt, -COMFORT_EXTRA_MINUTES);
+  if (new Date(recommendedDepartureAt).getTime() < new Date(dayStartIso).getTime() &&
+      new Date(latestDepartureAt).getTime() >= new Date(dayStartIso).getTime()) {
+    recommendedDepartureAt = dayStartIso;
+  }
+
+  const trafficRoad = await params.road.route(params.origin, params.station, recommendedDepartureAt);
+  if (recommendedDepartureAt !== dayStartIso) {
+    recommendedDepartureAt = addMinutes(rail.departureAt, -(STATION_BUFFER_MINUTES + COMFORT_EXTRA_MINUTES + trafficRoad.durationMinutes));
+  }
+  const stationArrivalAt = addMinutes(recommendedDepartureAt, trafficRoad.durationMinutes);
+  const comfortableDepartureAt = recommendedDepartureAt === dayStartIso
+    ? dayStartIso
+    : addMinutes(recommendedDepartureAt, -COMFORT_EXTRA_MINUTES);
+  const actualBufferMinutes = minutesBetween(stationArrivalAt, rail.departureAt);
+  if (actualBufferMinutes < STATION_BUFFER_MINUTES) return null;
+
+  const impact = estimateImpact({
+    carKm: trafficRoad.distanceKm,
+    railKm: rail.distanceKm,
+    directCarKm: params.directRoadKm,
+    vehicleType: params.request.vehicleType
+  });
+
+  return {
+    id: params.station.id,
+    station: params.station,
+    recommendedDepartureAt,
+    comfortableDepartureAt,
+    latestDepartureAt,
+    stationArrivalAt,
+    trainDepartureAt: rail.departureAt,
+    destinationArrivalAt: rail.arrivalAt,
+    totalMinutes: minutesBetween(recommendedDepartureAt, rail.arrivalAt),
+    drive: trafficRoad,
+    rail,
+    bufferMinutes: actualBufferMinutes,
+    ...impact,
+    isStrategicException: driveLimitExceededBy > 0,
+    driveLimitExceededBy,
+    labels: [],
+    warnings: []
+  };
+}
+
+type BatchResult = {
+  options: JourneyOption[];
+  failures: string[];
+};
+
+async function evaluateCandidates(params: {
+  candidates: StationCandidate[];
+  request: SearchRequest;
+  origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  road: RoadProvider;
+  rail: RailProvider;
+  directRoadKm: number;
+  searchAtIso?: string;
+}): Promise<BatchResult> {
+  const settled = await Promise.allSettled(params.candidates.map((candidate) => buildOption({
+    station: candidate.station,
+    strategicException: candidate.strategicException,
+    allowedDriveMinutes: candidate.allowedDriveMinutes,
+    searchAtIso: params.searchAtIso,
+    request: params.request,
+    origin: params.origin,
+    destination: params.destination,
+    road: params.road,
+    rail: params.rail,
+    directRoadKm: params.directRoadKm
+  })));
+
+  const options: JourneyOption[] = [];
+  const failures: string[] = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      if (result.value) options.push(result.value);
+      return;
+    }
+    const stationName = params.candidates[index]?.station.name ?? `gare ${index + 1}`;
+    failures.push(stationName);
+    console.error(`Échec API pour ${stationName}:`, result.reason);
+  });
+  return { options, failures };
+}
+
+async function evaluateEarliestSameDay(params: {
+  candidates: StationCandidate[];
+  request: SearchRequest;
+  origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  road: RoadProvider;
+  rail: RailProvider;
+  directRoadKm: number;
+}): Promise<BatchResult> {
+  const settled = await Promise.allSettled(params.candidates.map((candidate) => buildEarliestSameDayOption({
+    station: candidate.station,
+    allowedDriveMinutes: candidate.allowedDriveMinutes,
+    request: params.request,
+    origin: params.origin,
+    destination: params.destination,
+    road: params.road,
+    rail: params.rail,
+    directRoadKm: params.directRoadKm
+  })));
+
+  const options: JourneyOption[] = [];
+  const failures: string[] = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      if (result.value) options.push(result.value);
+      return;
+    }
+    const stationName = params.candidates[index]?.station.name ?? `gare ${index + 1}`;
+    failures.push(stationName);
+    console.error(`Échec API départ jour même pour ${stationName}:`, result.reason);
+  });
+  return { options, failures };
+}
+
+function sameDayDepartures(options: JourneyOption[], request: SearchRequest) {
+  return options.filter((option) => parisDateKey(option.recommendedDepartureAt) === request.date);
+}
+
+function minimumDriveOverrun(options: JourneyOption[]) {
+  const positive = options.map((option) => option.driveLimitExceededBy).filter((value) => value > 0);
+  return positive.length ? Math.min(...positive) : 0;
+}
+
 export async function searchMultimodal(request: SearchRequest): Promise<SearchResponse> {
   const origin = resolveKnownPlace(request.origin);
   const destination = resolveKnownPlace(request.destination);
@@ -362,29 +553,113 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const { road, rail, roadLive, railLive, roadName, railName } = providers(destination.countryCode);
   const directRoad = await road.route(origin, destination);
   const international = Boolean(destination.countryCode && destination.countryCode !== "FR");
-  const stations = candidateStations(origin, destination, request.maxDriveMinutes, international);
+  const originalTargetIso = zonedLocalToIso(request.date, request.time);
   const failures: string[] = [];
-  const settled = await Promise.allSettled(stations.map((candidate) => buildOption({
-    station: candidate.station,
-    strategicException: candidate.strategicException,
+
+  const baseCandidates = candidateStations(origin, destination, request.maxDriveMinutes, international, false);
+  const baseBatch = await evaluateCandidates({
+    candidates: baseCandidates,
     request,
     origin,
     destination,
     road,
     rail,
-    directRoadKm: directRoad.distanceKm
-  })));
-  const options: JourneyOption[] = [];
-  settled.forEach((result, index) => {
-    if (result.status === "fulfilled") {
-      if (result.value) options.push(result.value);
-      return;
-    }
-    failures.push(stations[index]?.station.name ?? `gare ${index + 1}`);
-    console.error(`Échec API pour ${stations[index]?.station.name}:`, result.reason);
+    directRoadKm: directRoad.distanceKm,
+    searchAtIso: originalTargetIso
   });
-  const paretoOptions = pareto(options);
+  failures.push(...baseBatch.failures);
 
+  let options = baseBatch.options;
+  let adjustment: SearchResponse["adjustment"] = {
+    kind: "none",
+    driveExtensionMinutes: 0,
+    arrivalShiftMinutes: 0,
+    message: "Recherche effectuée avec les préférences demandées."
+  };
+
+  if (request.mode === "arriveBy") {
+    const baseSameDay = sameDayDepartures(baseBatch.options, request);
+
+    if (baseSameDay.length) {
+      options = baseSameDay;
+      const overrun = minimumDriveOverrun(baseSameDay);
+      if (overrun > 0 && baseSameDay.every((option) => option.driveLimitExceededBy > 0)) {
+        adjustment = {
+          kind: "moreDrive",
+          driveExtensionMinutes: overrun,
+          arrivalShiftMinutes: 0,
+          message: `Pour partir le jour même, l’app a retenu des gares au-delà de la préférence voiture (+${compactDuration(overrun)} minimum).`
+        };
+      }
+    } else {
+      // Palier 2 : avant d'accepter un départ la veille, on autorise davantage
+      // de voiture (jusqu'à +2 h) et on teste plus de gares.
+      const expandedCandidates = candidateStations(origin, destination, request.maxDriveMinutes, international, true);
+      const expandedBatch = await evaluateCandidates({
+        candidates: expandedCandidates,
+        request,
+        origin,
+        destination,
+        road,
+        rail,
+        directRoadKm: directRoad.distanceKm,
+        searchAtIso: originalTargetIso
+      });
+      failures.push(...expandedBatch.failures);
+      const expandedSameDay = sameDayDepartures(expandedBatch.options, request);
+
+      if (expandedSameDay.length) {
+        options = expandedSameDay;
+        const overrun = minimumDriveOverrun(expandedSameDay);
+        adjustment = {
+          kind: "moreDrive",
+          driveExtensionMinutes: overrun,
+          arrivalShiftMinutes: 0,
+          message: `Aucun bon départ le jour même avec la limite initiale : recherche élargie en voiture jusqu’à +2 h${overrun ? ` (première option à +${compactDuration(overrun)})` : ""}.`
+        };
+      } else {
+        // Palier 3 : on cherche l'arrivée la plus tôt réellement atteignable
+        // en partant le jour demandé. Cela évite trois recherches artificielles
+        // à +1 h / +2 h / +4 h et donne directement le premier trajet faisable.
+        const earliestBatch = await evaluateEarliestSameDay({
+          candidates: expandedCandidates,
+          request,
+          origin,
+          destination,
+          road,
+          rail,
+          directRoadKm: directRoad.distanceKm
+        });
+        failures.push(...earliestBatch.failures);
+        const earliestSameDay = sameDayDepartures(earliestBatch.options, request);
+
+        if (earliestSameDay.length) {
+          options = earliestSameDay;
+          const targetMs = new Date(originalTargetIso).getTime();
+          const bestArrivalMs = Math.min(...earliestSameDay.map((option) => new Date(option.destinationArrivalAt).getTime()));
+          const arrivalShiftMinutes = Math.max(0, Math.round((bestArrivalMs - targetMs) / 60_000));
+          const overrun = minimumDriveOverrun(earliestSameDay);
+          adjustment = {
+            kind: "laterArrival",
+            driveExtensionMinutes: overrun,
+            arrivalShiftMinutes,
+            message: `Aucun départ le jour même ne permettait d’arriver avant ${request.time}. L’app affiche maintenant les premières arrivées réalisables le jour même${arrivalShiftMinutes ? ` (à partir de +${compactDuration(arrivalShiftMinutes)})` : ""}${overrun ? `, avec jusqu’à +${compactDuration(overrun)} de voiture sur les options retenues` : ""}.`
+          };
+        } else {
+          // Dernier recours uniquement : la veille.
+          options = expandedBatch.options.length ? expandedBatch.options : baseBatch.options;
+          adjustment = {
+            kind: "previousDay",
+            driveExtensionMinutes: 120,
+            arrivalShiftMinutes: 0,
+            message: "Même en cherchant les premiers trains accessibles après minuit et en autorisant jusqu’à +2 h de voiture, aucun départ le jour même n’a été trouvé. Les options de la veille sont affichées en dernier recours."
+          };
+        }
+      }
+    }
+  }
+
+  const paretoOptions = pareto(options);
   const mode: SearchResponse["mode"] = roadLive && railLive ? "live" : roadLive || railLive ? "hybrid" : "demo";
   const notes: string[] = [];
   if (railLive && destination.countryCode && destination.countryCode !== "FR") {
@@ -395,11 +670,17 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   } else {
     notes.push("Temps voiture calculés par Google Routes, avec trafic lorsque l'heure de départ est connue.");
   }
-  if (failures.length) {
-    notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
+  const uniqueFailures = [...new Set(failures)];
+  if (uniqueFailures.length) {
+    notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${uniqueFailures.join(", ")}.`);
   }
   notes.push(request.maxTransfers === 0 ? "Filtre actif : trajet ferroviaire direct uniquement." : `Filtre actif : ${request.maxTransfers} correspondance${request.maxTransfers > 1 ? "s" : ""} maximum.`);
-  notes.push(request.mode === "arriveBy" ? "Synthèse affichée : gare la plus proche, train le plus direct, meilleur compromis et arrivée la plus proche de l’heure demandée parmi les trajets restant compétitifs." : "Synthèse affichée : gare la plus proche, train le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");
+  if (request.mode === "arriveBy") {
+    notes.push("Priorité de recherche : départ le jour demandé → davantage de voiture → arrivée plus tardive → veille seulement en dernier recours.");
+    notes.push("Synthèse affichée : gare la plus proche, train le plus direct, meilleur compromis et arrivée la plus proche de l’heure demandée parmi les trajets restant compétitifs.");
+  } else {
+    notes.push("Synthèse affichée : gare la plus proche, train le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");
+  }
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
 
   return {
@@ -414,6 +695,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
       road: { name: roadName, live: roadLive },
       rail: { name: railName, live: railLive }
     },
+    adjustment,
     notes
   };
 }

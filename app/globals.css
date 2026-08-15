@@ -115,3 +115,28 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   display: inline-block;
   margin-left: 4px;
 }
+
+
+.adjustment-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 18px;
+  padding: 13px 15px;
+  border-radius: 14px;
+  border: 1px solid #c9dfd2;
+  background: #eef8f1;
+  color: #244b35;
+  font-size: 13px;
+}
+.adjustment-box strong { font-size: 13px; }
+.adjustment-box.previousDay {
+  border-color: #efc6a0;
+  background: #fff5e9;
+  color: #7b481b;
+}
+.adjustment-box.laterArrival {
+  border-color: #c9d9e7;
+  background: #f1f7fb;
+  color: #28536b;
+}

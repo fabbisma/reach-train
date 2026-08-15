@@ -1,6 +1,6 @@
 {
   "name": "eco-rail-planner",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

@@ -61,6 +61,17 @@ function navitiaTransfers(sections: NavitiaSection[] = []): RailTransfer[] {
   return details;
 }
 
+function localDateKey(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(iso));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export class NavitiaRailProvider implements RailProvider {
   constructor(private readonly token: string) {}
 
@@ -101,17 +112,30 @@ export class NavitiaRailProvider implements RailProvider {
     const eligible = (json.journeys ?? [])
       .filter((item) => (item.nb_transfers ?? 0) <= params.maxTransfers)
       .sort((a, b) => {
-        const transferDelta = (a.nb_transfers ?? 0) - (b.nb_transfers ?? 0);
-        if (transferDelta !== 0) return transferDelta;
-
         const aDeparture = parseNavitiaDate(a.departure_date_time);
         const bDeparture = parseNavitiaDate(b.departure_date_time);
         const aArrival = parseNavitiaDate(a.arrival_date_time);
         const bArrival = parseNavitiaDate(b.arrival_date_time);
+
+        if (params.mode === "arriveBy") {
+          const targetDate = localDateKey(params.searchAt);
+          const sameDayA = localDateKey(aDeparture) === targetDate ? 0 : 1;
+          const sameDayB = localDateKey(bDeparture) === targetDate ? 0 : 1;
+          if (sameDayA !== sameDayB) return sameDayA - sameDayB;
+        }
+
+        if (params.mode === "departAt") {
+          const arrivalDelta = new Date(aArrival).getTime() - new Date(bArrival).getTime();
+          if (arrivalDelta !== 0) return arrivalDelta;
+        }
+
+        const transferDelta = (a.nb_transfers ?? 0) - (b.nb_transfers ?? 0);
+        if (transferDelta !== 0) return transferDelta;
+
         if (params.mode === "arriveBy") {
           return new Date(bDeparture).getTime() - new Date(aDeparture).getTime();
         }
-        return new Date(aArrival).getTime() - new Date(bArrival).getTime();
+        return new Date(aDeparture).getTime() - new Date(bDeparture).getTime();
       });
 
     const journey = eligible[0];

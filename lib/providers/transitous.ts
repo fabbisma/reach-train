@@ -78,6 +78,17 @@ function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
   return details;
 }
 
+function localDateKey(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(iso));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 export class TransitousRailProvider implements RailProvider {
   constructor(private readonly contact: string) {}
 
@@ -105,7 +116,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.1.9 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.2.0 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -129,18 +140,31 @@ export class TransitousRailProvider implements RailProvider {
 
   private bestItinerary(
     itineraries: TransitousItinerary[],
-    mode: "arriveBy" | "departAt"
+    mode: "arriveBy" | "departAt",
+    searchAt: string
   ): TransitousItinerary | undefined {
+    const targetDate = localDateKey(searchAt);
     return [...itineraries].sort((a, b) => {
-      // Le nombre demandé est un plafond. On privilégie d'abord le moins de
-      // correspondances : 1 signifie donc "direct OU 1 correspondance".
+      if (mode === "arriveBy") {
+        // Évite qu'un direct de la veille masque un bon trajet le jour même.
+        // Le nombre de correspondances reste un plafond, pas une obligation.
+        const sameDayA = localDateKey(a.startTime) === targetDate ? 0 : 1;
+        const sameDayB = localDateKey(b.startTime) === targetDate ? 0 : 1;
+        if (sameDayA !== sameDayB) return sameDayA - sameDayB;
+      }
+
+      if (mode === "departAt") {
+        const arrivalDelta = new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+        if (arrivalDelta !== 0) return arrivalDelta;
+      }
+
       const transferDelta = Math.max(0, a.transfers) - Math.max(0, b.transfers);
       if (transferDelta !== 0) return transferDelta;
 
       if (mode === "arriveBy") {
         return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
       }
-      return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+      return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
     })[0];
   }
 
@@ -162,7 +186,7 @@ export class TransitousRailProvider implements RailProvider {
       if (directItineraries.length) itineraries = [...directItineraries, ...itineraries];
     }
 
-    const itinerary = this.bestItinerary(itineraries, params.mode);
+    const itinerary = this.bestItinerary(itineraries, params.mode, params.searchAt);
     if (!itinerary) return null;
 
     const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));

@@ -25,7 +25,7 @@ function fmtDuration(minutes: number) {
 const labelText = {
   closestDrive: "🚗 Gare la plus proche",
   mostDirectRail: "🚆 Train le plus direct",
-  mostCarSaved: "🌿 Plus de voiture économisée"
+  bestCompromise: "⚖️ Meilleur compromis"
 } as const;
 
 export default function SearchForm() {
@@ -126,7 +126,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.7 : l’app analyse toutes les gares candidates mais synthétise seulement les meilleures selon 3 critères : proximité en voiture, train le plus direct et kilomètres de voiture économisés.</p>
+        <p className="form-hint">V0.1.8 : l’app synthétise 3 choix : gare la plus proche, train le plus direct et meilleur compromis voiture + train. Les correspondances sont détaillées avec leur temps de transit.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -168,6 +168,19 @@ export default function SearchForm() {
                     <div><span>🅿️</span><p><b>{fmtTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
                     <div><span>🚆</span><p><b>{fmtTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
                       {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}</p></div>
+                    {option.rail.transfers?.map((transfer, index) => (
+                      <div className="transfer-step" key={`${transfer.stationName}-${transfer.arrivalAt}-${index}`}>
+                        <span>🔁</span>
+                        <p>
+                          <b>{transfer.stationName}</b><br/>
+                          <small>Arrivée {fmtTime(transfer.arrivalAt)} · départ suivant {fmtTime(transfer.departureAt)}</small>
+                          <strong className="transfer-duration">Transit : {fmtDuration(transfer.durationMinutes)}</strong>
+                          {(transfer.fromService || transfer.toService) && (
+                            <small className="services">{transfer.fromService ?? "Train précédent"} → {transfer.toService ?? "Train suivant"}</small>
+                          )}
+                        </p>
+                      </div>
+                    ))}
                     <div><span>📍</span><p><b>{fmtTime(option.destinationArrivalAt)}</b> arrivée</p></div>
                   </div>
 

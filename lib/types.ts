@@ -33,6 +33,15 @@ export type RoadLeg = {
   durationMinutes: number;
 };
 
+export type RailTransfer = {
+  stationName: string;
+  arrivalAt: string;
+  departureAt: string;
+  durationMinutes: number;
+  fromService?: string;
+  toService?: string;
+};
+
 export type RailLeg = {
   distanceKm: number;
   durationMinutes: number;
@@ -41,6 +50,7 @@ export type RailLeg = {
   changes: number;
   services?: string[];
   realtime?: boolean;
+  transfers?: RailTransfer[];
 };
 
 export type JourneyOption = {
@@ -62,7 +72,7 @@ export type JourneyOption = {
   isStrategicException: boolean;
   driveLimitExceededBy: number;
   score?: number;
-  labels: Array<"closestDrive" | "mostDirectRail" | "mostCarSaved">;
+  labels: Array<"closestDrive" | "mostDirectRail" | "bestCompromise">;
 };
 
 export type ProviderStatus = {

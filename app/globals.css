@@ -91,3 +91,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   margin-top: 3px;
   color: #52645b;
 }
+
+.transfer-step p { width: 100%; }
+.transfer-step { margin-top: 2px !important; margin-bottom: 15px !important; }
+.transfer-duration { display: block; margin-top: 4px; color: var(--blue); font-size: 12px; }

@@ -106,13 +106,18 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - Lorsqu'une gare offre à la fois un direct et un trajet avec correspondance, le moteur privilégie le direct ; à nombre de correspondances égal, il garde le meilleur horaire.
 - Même comportement pour Transitous/MOTIS et Navitia.
 
+## V0.1.8 — synthèse + correspondances détaillées
 
-## V0.1.7 — synthèse des meilleures options
-
-L’écran principal n’affiche plus toutes les gares viables. Le moteur analyse toujours les candidates en arrière-plan puis ne conserve que :
-
-1. **Gare la plus proche en voiture** — durée de conduite minimale.
-2. **Train le plus direct** — nombre de correspondances minimal, puis durée ferroviaire minimale.
-3. **Plus de voiture économisée** — maximum de kilomètres de conduite évités par rapport au trajet 100 % voiture.
-
-Si une même gare gagne plusieurs catégories, elle n’est affichée qu’une fois avec plusieurs badges.
+- Remplace « plus de voiture économisée » par **« meilleur compromis »**.
+- La synthèse principale devient :
+  1. gare la plus proche en voiture ;
+  2. train le plus direct ;
+  3. meilleur compromis entre temps de voiture et temps de train.
+- Le score de compromis donne le même poids au temps voiture et au temps train, puis ajoute une petite pénalité de confort par correspondance. Le temps train inclut déjà les attentes de correspondance : un transit court reste donc compétitif.
+- Pour Transitous/MOTIS et Navitia, chaque changement de train affiche :
+  - gare de correspondance ;
+  - heure d'arrivée du train précédent ;
+  - heure de départ du train suivant ;
+  - durée de transit ;
+  - services avant/après lorsqu'ils sont fournis par l'API.
+- Une correspondance entre deux gares différentes est signalée sous la forme `Gare A → Gare B`.

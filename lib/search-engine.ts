@@ -156,20 +156,37 @@ function summarizeOptions(options: JourneyOption[]) {
     a.totalMinutes - b.totalMinutes
   )[0];
 
-  const mostCarSaved = [...options].sort((a, b) =>
-    b.carKmAvoided - a.carKmAvoided ||
-    a.drive.distanceKm - b.drive.distanceKm ||
-    a.totalMinutes - b.totalMinutes
-  )[0];
+  // Compromis lisible entre deux objectifs : rejoindre une gare sans trop
+  // conduire ET garder un trajet ferroviaire rapide. Le temps de train inclut
+  // déjà l'attente pendant les correspondances ; on ajoute une petite pénalité
+  // de confort de 15 min par changement pour favoriser un direct ou un transit court.
+  const minDrive = Math.min(...options.map((option) => option.drive.durationMinutes));
+  const maxDrive = Math.max(...options.map((option) => option.drive.durationMinutes));
+  const minRail = Math.min(...options.map((option) => option.rail.durationMinutes));
+  const maxRail = Math.max(...options.map((option) => option.rail.durationMinutes));
+
+  const normalized = (value: number, min: number, max: number) =>
+    max === min ? 0 : (value - min) / (max - min);
+
+  const bestCompromise = [...options].sort((a, b) => {
+    const scoreA =
+      normalized(a.drive.durationMinutes, minDrive, maxDrive) * 0.5 +
+      normalized(a.rail.durationMinutes, minRail, maxRail) * 0.5 +
+      a.rail.changes * 0.12;
+    const scoreB =
+      normalized(b.drive.durationMinutes, minDrive, maxDrive) * 0.5 +
+      normalized(b.rail.durationMinutes, minRail, maxRail) * 0.5 +
+      b.rail.changes * 0.12;
+    return scoreA - scoreB || a.totalMinutes - b.totalMinutes;
+  })[0];
 
   closestDrive.labels.push("closestDrive");
   if (!mostDirectRail.labels.includes("mostDirectRail")) mostDirectRail.labels.push("mostDirectRail");
-  if (!mostCarSaved.labels.includes("mostCarSaved")) mostCarSaved.labels.push("mostCarSaved");
+  if (!bestCompromise.labels.includes("bestCompromise")) bestCompromise.labels.push("bestCompromise");
 
-  // Une même gare peut gagner plusieurs catégories. On ne duplique pas la carte :
-  // ses badges indiquent simplement les critères pour lesquels elle est la meilleure.
+  // Une même gare peut gagner plusieurs catégories ; on conserve une seule carte.
   const selected = new Map<string, JourneyOption>();
-  for (const option of [closestDrive, mostDirectRail, mostCarSaved]) selected.set(option.id, option);
+  for (const option of [closestDrive, mostDirectRail, bestCompromise]) selected.set(option.id, option);
 
   return [...selected.values()].sort((a, b) => {
     const order = (x: JourneyOption) =>
@@ -307,7 +324,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
   }
   notes.push(request.maxTransfers === 0 ? "Filtre actif : trajet ferroviaire direct uniquement." : `Filtre actif : ${request.maxTransfers} correspondance${request.maxTransfers > 1 ? "s" : ""} maximum.`);
-  notes.push("Synthèse affichée : gare la plus proche en voiture, trajet ferroviaire le plus direct et option qui économise le plus de kilomètres de voiture.");
+  notes.push("Synthèse affichée : gare la plus proche en voiture, trajet ferroviaire le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
 
   return {

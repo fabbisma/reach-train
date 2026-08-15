@@ -1,13 +1,22 @@
 import type { RailProvider } from "@/lib/providers/types";
-import type { Place, RailLeg, Station } from "@/lib/types";
+import type { Place, RailLeg, RailTransfer, Station } from "@/lib/types";
 import { haversineKm } from "@/lib/utils";
+
+type TransitousPlace = {
+  name?: string;
+};
 
 type TransitousLeg = {
   mode?: string;
   displayName?: string;
   routeShortName?: string;
+  tripShortName?: string;
   agencyName?: string;
   realTime?: boolean;
+  startTime?: string;
+  endTime?: string;
+  from?: TransitousPlace;
+  to?: TransitousPlace;
 };
 
 type TransitousItinerary = {
@@ -32,6 +41,42 @@ const RAIL_MODES = new Set([
   "SUBURBAN",
   "SUBWAY"
 ]);
+
+function serviceName(leg?: TransitousLeg) {
+  if (!leg) return undefined;
+  return leg.displayName || leg.routeShortName || leg.tripShortName || leg.agencyName || undefined;
+}
+
+function stationName(previous: TransitousLeg, next: TransitousLeg) {
+  const arrival = previous.to?.name?.trim();
+  const departure = next.from?.name?.trim();
+  if (arrival && departure && arrival !== departure) return `${arrival} → ${departure}`;
+  return arrival || departure || "Correspondance";
+}
+
+function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
+  const details: RailTransfer[] = [];
+  for (let index = 0; index < railLegs.length - 1; index += 1) {
+    const previous = railLegs[index];
+    const next = railLegs[index + 1];
+    if (!previous.endTime || !next.startTime) continue;
+
+    const durationMinutes = Math.max(
+      0,
+      Math.round((new Date(next.startTime).getTime() - new Date(previous.endTime).getTime()) / 60_000)
+    );
+
+    details.push({
+      stationName: stationName(previous, next),
+      arrivalAt: new Date(previous.endTime).toISOString(),
+      departureAt: new Date(next.startTime).toISOString(),
+      durationMinutes,
+      fromService: serviceName(previous),
+      toService: serviceName(next)
+    });
+  }
+  return details;
+}
 
 export class TransitousRailProvider implements RailProvider {
   constructor(private readonly contact: string) {}
@@ -60,7 +105,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.1.6 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.1.8 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -111,8 +156,7 @@ export class TransitousRailProvider implements RailProvider {
 
     // MOTIS peut ne retourner que les itinéraires optimaux pour le plafond
     // demandé. Si maxTransfers > 0 et qu'aucun direct n'est présent dans cette
-    // réponse, on fait une vérification ciblée en direct-only. Cela garantit
-    // que "1 correspondance max" n'efface pas un train direct existant.
+    // réponse, on fait une vérification ciblée en direct-only.
     if (params.maxTransfers > 0 && !itineraries.some((itinerary) => Math.max(0, itinerary.transfers) === 0)) {
       const directItineraries = await this.fetchItineraries({ ...params, maxTransfers: 0 });
       if (directItineraries.length) itineraries = [...directItineraries, ...itineraries];
@@ -124,9 +168,9 @@ export class TransitousRailProvider implements RailProvider {
     const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
     const services = [...new Set(
       railLegs
-        .map((leg) => leg.displayName || leg.routeShortName || leg.agencyName)
+        .map((leg) => serviceName(leg))
         .filter((value): value is string => Boolean(value))
-    )].slice(0, 4);
+    )].slice(0, 5);
 
     return {
       distanceKm: Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
@@ -135,7 +179,8 @@ export class TransitousRailProvider implements RailProvider {
       arrivalAt: new Date(itinerary.endTime).toISOString(),
       changes: Math.max(0, itinerary.transfers),
       services,
-      realtime: railLegs.some((leg) => leg.realTime === true)
+      realtime: railLegs.some((leg) => leg.realTime === true),
+      transfers: transferDetails(railLegs)
     };
   }
 }

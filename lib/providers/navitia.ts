@@ -1,5 +1,5 @@
 import type { RailProvider } from "@/lib/providers/types";
-import type { Place, RailLeg, Station } from "@/lib/types";
+import type { Place, RailLeg, RailTransfer, Station } from "@/lib/types";
 import { haversineKm, isoToNavitiaLocal, zonedLocalToIso } from "@/lib/utils";
 
 function navitiaDate(iso: string) {
@@ -11,6 +11,54 @@ function parseNavitiaDate(value: string) {
   if (!match) return new Date(value).toISOString();
   const [, y, m, d, hh, mm] = match;
   return zonedLocalToIso(`${y}-${m}-${d}`, `${hh}:${mm}`);
+}
+
+type NavitiaSection = {
+  type?: string;
+  departure_date_time?: string;
+  arrival_date_time?: string;
+  from?: { name?: string };
+  to?: { name?: string };
+  display_informations?: {
+    name?: string;
+    label?: string;
+    trip_short_name?: string;
+    headsign?: string;
+  };
+};
+
+function navitiaService(section?: NavitiaSection) {
+  const info = section?.display_informations;
+  return info?.trip_short_name || info?.label || info?.name || info?.headsign || undefined;
+}
+
+function navitiaTransfers(sections: NavitiaSection[] = []): RailTransfer[] {
+  const publicTransport = sections.filter((section) => section.type === "public_transport");
+  const details: RailTransfer[] = [];
+
+  for (let index = 0; index < publicTransport.length - 1; index += 1) {
+    const previous = publicTransport[index];
+    const next = publicTransport[index + 1];
+    if (!previous.arrival_date_time || !next.departure_date_time) continue;
+
+    const arrivalAt = parseNavitiaDate(previous.arrival_date_time);
+    const departureAt = parseNavitiaDate(next.departure_date_time);
+    const arrivalName = previous.to?.name?.trim();
+    const departureName = next.from?.name?.trim();
+
+    details.push({
+      stationName: arrivalName && departureName && arrivalName !== departureName
+        ? `${arrivalName} → ${departureName}`
+        : arrivalName || departureName || "Correspondance",
+      arrivalAt,
+      departureAt,
+      durationMinutes: Math.max(0, Math.round((new Date(departureAt).getTime() - new Date(arrivalAt).getTime()) / 60_000)),
+      fromService: navitiaService(previous),
+      toService: navitiaService(next)
+    });
+  }
+
+  return details;
 }
 
 export class NavitiaRailProvider implements RailProvider {
@@ -46,13 +94,13 @@ export class NavitiaRailProvider implements RailProvider {
         duration: number;
         nb_transfers?: number;
         distances?: { train?: number; rail_shuttle?: number };
+        sections?: NavitiaSection[];
       }>;
     };
 
     const eligible = (json.journeys ?? [])
       .filter((item) => (item.nb_transfers ?? 0) <= params.maxTransfers)
       .sort((a, b) => {
-        // max_nb_transfers est un plafond : on privilégie les directs lorsqu'ils existent.
         const transferDelta = (a.nb_transfers ?? 0) - (b.nb_transfers ?? 0);
         if (transferDelta !== 0) return transferDelta;
 
@@ -70,12 +118,17 @@ export class NavitiaRailProvider implements RailProvider {
     if (!journey) return null;
 
     const railMeters = (journey.distances?.train ?? 0) + (journey.distances?.rail_shuttle ?? 0);
+    const publicTransportSections = (journey.sections ?? []).filter((section) => section.type === "public_transport");
+    const services = [...new Set(publicTransportSections.map(navitiaService).filter((value): value is string => Boolean(value)))].slice(0, 5);
+
     return {
       distanceKm: railMeters ? Math.round((railMeters / 1000) * 10) / 10 : Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
       durationMinutes: Math.round(journey.duration / 60),
       departureAt: parseNavitiaDate(journey.departure_date_time),
       arrivalAt: parseNavitiaDate(journey.arrival_date_time),
-      changes: journey.nb_transfers ?? 0
+      changes: journey.nb_transfers ?? 0,
+      services,
+      transfers: navitiaTransfers(journey.sections)
     };
   }
 }

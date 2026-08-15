@@ -193,3 +193,12 @@ Le nombre de correspondances n'est plus un filtre utilisateur : jusqu'à 3 sont 
 - Affiche les 1er, 2e et 3e meilleurs candidats pour chacun des quatre critères, pour le jour J et la veille.
 - Les rangs sont indiqués par 🥇, 🥈 et 🥉.
 - Une même gare n’apparaît toujours qu’une fois par jour, même si elle est classée dans plusieurs critères.
+
+
+## V0.2.7 — segments train, référence voiture et mini-carte
+
+- Chaque trajet ferroviaire est maintenant découpé clairement par train : **gare de départ → gare d’arrivée**, horaires et service.
+- Les correspondances sont placées entre les deux trains concernés avec l’heure d’arrivée, l’heure du départ suivant et le temps de transit.
+- Ajoute une référence **100 % voiture** et, sur chaque proposition, l’écart de temps porte-à-porte par rapport à cette référence.
+- Ajoute une mini-carte SVG légère basée sur les coordonnées des gares déjà présentes dans les segments ferroviaires. Aucun appel cartographique supplémentaire n’est nécessaire.
+- La mini-carte est volontairement schématique : elle sert à repérer les détours géographiques grossiers via les gares de passage/correspondance, pas à reproduire précisément la voie ferrée.

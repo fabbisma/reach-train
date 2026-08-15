@@ -1,0 +1,15 @@
+Eco Rail Planner — V0.3.0.2 Global Beta
+Clean full-project baseline.
+
+IMPORTANT:
+- Canonical search engine: lib/search-engine.ts
+- There must NOT be a search-engine.ts at repository root.
+- This full build replaces the mixed hotfix state.
+
+Expected top-level source folders:
+app/
+components/
+lib/
+
+Expected search engine occurrences: exactly 1
+lib/search-engine.ts

@@ -169,7 +169,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.3.0.1 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.3.0.2 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)

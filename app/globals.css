@@ -219,6 +219,33 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   background: #edf2ef;
   z-index: 0;
 }
+
+.rail-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  padding: 8px 14px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.rail-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rail-map-legend i {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-style: solid;
+}
+.rail-map-legend .legend-road {
+  border-top-color: #4f6f9f;
+  border-top-style: dashed;
+}
+.rail-map-legend .legend-rail { border-top-color: #2b8a5a; }
+
 .rail-map-route {
   padding: 7px 14px 10px;
   color: var(--muted);

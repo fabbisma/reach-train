@@ -30,6 +30,7 @@ export type SearchRequest = {
 export type RoadLeg = {
   distanceKm: number;
   durationMinutes: number;
+  geometry?: LatLng[];
 };
 
 export type RailTransfer = {

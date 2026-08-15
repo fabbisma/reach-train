@@ -48,7 +48,7 @@ function recommendationLabel(label: RecommendationBadge) {
   return `${medal} ${labelText[label.criterion]}`;
 }
 
-function RailDetails({ option, destination }: { option: JourneyOption; destination: Place }) {
+function RailDetails({ option, origin, destination }: { option: JourneyOption; origin: Place; destination: Place }) {
   const segments = option.rail.segments ?? [];
   const firstStation = segments[0]?.fromStation ?? option.station.name;
   const lastStation = segments[segments.length - 1]?.toStation ?? destination.name;
@@ -63,7 +63,7 @@ function RailDetails({ option, destination }: { option: JourneyOption; destinati
         </div>
       </div>
 
-      <RailMap option={option} destination={destination} />
+      <RailMap option={option} origin={origin} destination={destination} />
 
       {segments.length > 0 ? (
         <div className="rail-segments">
@@ -194,7 +194,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.8 : vraie mini-carte OpenStreetMap avec tracé ferroviaire, segments détaillés et comparaison 100 % voiture.</p>
+        <p className="form-hint">V0.2.8.1 : mini-carte OpenStreetMap avec liaison voiture + tracé ferroviaire, segments détaillés et comparaison 100 % voiture.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -210,7 +210,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🧩 V0.2.8</span>
+            <span>🧩 V0.2.8.1</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -268,7 +268,7 @@ export default function SearchForm() {
                                 <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
                               </div>
 
-                              <RailDetails option={option} destination={result.destination} />
+                              <RailDetails option={option} origin={result.origin} destination={result.destination} />
 
                               <div className="car-comparison">
                                 <div>
@@ -304,7 +304,7 @@ export default function SearchForm() {
 
           <div className="notes">
             <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; les 3 meilleurs candidats par critère sont affichés, avec déduplication des gares.</p>
-            <p>• La mini-carte utilise un fond OpenStreetMap. Avec Transitous, le tracé ferroviaire détaillé est utilisé quand MOTIS fournit sa géométrie ; sinon la carte relie les gares connues.</p>
+            <p>• La mini-carte montre maintenant la liaison voiture jusqu’à la gare puis le train. Avec Google Routes, la route voiture réelle est tracée ; sinon une liaison directe est utilisée. Avec Transitous, le tracé ferroviaire détaillé MOTIS reste prioritaire.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

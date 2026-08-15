@@ -8,7 +8,14 @@ export class MockRoadProvider implements RoadProvider {
     const distanceKm = directKm * 1.2;
     const averageKph = distanceKm < 25 ? 52 : distanceKm < 80 ? 70 : 82;
     const durationMinutes = Math.round((distanceKm / averageKph) * 60 + 5);
-    return { distanceKm: Math.round(distanceKm * 10) / 10, durationMinutes };
+    return {
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      durationMinutes,
+      geometry: [
+        { lat: origin.lat, lng: origin.lng },
+        { lat: destination.lat, lng: destination.lng }
+      ]
+    };
   }
 }
 

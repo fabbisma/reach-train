@@ -1,23 +1,21 @@
-EcoRail Planner V0.2.8 — hotfix carte réelle
+EcoRail Planner V0.2.8.1 — hotfix liaison voiture sur la mini-carte
 
-Remplacer/ajouter TOUS les fichiers de cette archive en conservant exactement leurs chemins.
+Remplacer TOUS les fichiers de cette archive en conservant exactement leurs chemins.
 
 Fichiers :
-- package.json                         (ajoute Leaflet 1.9.4)
-- app/layout.tsx                      (charge le CSS Leaflet)
-- app/globals.css                     (styles de la vraie mini-carte)
-- components/search-form.tsx          (utilise la nouvelle carte, badge V0.2.8)
-- components/rail-map.tsx             (NOUVEAU : carte Leaflet/OpenStreetMap)
-- lib/types.ts                        (géométrie de segment)
-- lib/providers/transitous.ts         (récupère et décode legGeometry MOTIS)
-- lib/providers/navitia.ts            (utilise geojson si disponible)
+- components/rail-map.tsx
+- components/search-form.tsx
+- app/globals.css
+- lib/types.ts
+- lib/providers/google-routes.ts
+- lib/providers/mock.ts
 
-Important : components/rail-map.tsx est un NOUVEAU fichier à créer dans GitHub.
-Vercel installera automatiquement la nouvelle dépendance Leaflet à partir de package.json.
+Nouveautés :
+- la mini-carte affiche l’origine puis la liaison voiture jusqu’à la gare ;
+- avec Google Routes actif, le vrai tracé routier est utilisé via la polyline Compute Routes ;
+- en mode simulé, fallback par liaison directe origine → gare ;
+- voiture en pointillés, train en trait plein, avec légende ;
+- le zoom englobe voiture + train ;
+- badge interface V0.2.8.1.
 
-Comportement :
-- fond de carte OpenStreetMap réel ;
-- zoom auto sur le trajet ;
-- marqueurs gare de départ / correspondances / arrivée ;
-- tracé MOTIS détaillé lorsque Transitous fournit legGeometry ;
-- sinon fallback sur les coordonnées des gares.
+Aucune nouvelle dépendance n’est ajoutée par rapport à V0.2.8.

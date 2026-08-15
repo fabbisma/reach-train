@@ -489,7 +489,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
   if (request.mode === "arriveBy") notes.push("Les mêmes critères sont affichés séparément pour un départ le jour J et pour un départ la veille lorsqu'une solution existe.");
   notes.push(`Les gares peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
-  notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
+  notes.push("Les coûts et le CO₂ restent des estimations dans cette version. La comparaison 100 % voiture utilise le même provider routier que les accès aux gares.");
 
   const uniqueViableStations = new Set(rawOptions.map((option) => option.station.id)).size;
 
@@ -498,6 +498,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     request,
     origin,
     destination,
+    directCar: directRoad,
     options: summarized,
     viableStationCount: uniqueViableStations,
     paretoStationCount: simplePareto(rawOptions).length,

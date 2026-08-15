@@ -1,6 +1,8 @@
-EcoRail Planner V0.2.7.1 hotfix
+EcoRail Planner V0.2.7.2 hotfix
 
-À remplacer dans GitHub :
-  lib/types.ts
+Remplacer dans GitHub exactement :
+- lib/types.ts
+- lib/search-engine.ts
 
-Ce fichier corrige les erreurs Vercel : RailSegment manquant, RailLeg.segments manquant et SearchResponse.directCar manquant.
+Ce correctif synchronise SearchResponse.directCar avec le retour de search-engine.ts.
+Il corrige l'erreur Vercel TS2741: Property 'directCar' is missing ... but required in type 'SearchResponse'.

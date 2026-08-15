@@ -41,6 +41,20 @@ export type RailTransfer = {
   toService?: string;
 };
 
+export type RailSegment = {
+  fromStation: string;
+  toStation: string;
+  departureAt: string;
+  arrivalAt: string;
+  durationMinutes: number;
+  service?: string;
+  fromLat?: number;
+  fromLng?: number;
+  toLat?: number;
+  toLng?: number;
+  realtime?: boolean;
+};
+
 export type RailLeg = {
   distanceKm: number;
   durationMinutes: number;
@@ -50,6 +64,7 @@ export type RailLeg = {
   services?: string[];
   realtime?: boolean;
   transfers?: RailTransfer[];
+  segments?: RailSegment[];
 };
 
 export type RecommendationCriterion = "closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal";
@@ -100,6 +115,7 @@ export type SearchResponse = {
   request: SearchRequest;
   origin: Place;
   destination: Place;
+  directCar: RoadLeg;
   options: JourneyOption[];
   viableStationCount: number;
   paretoStationCount: number;

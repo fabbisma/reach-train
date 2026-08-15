@@ -34,7 +34,7 @@ function normalize(value: string) {
 }
 
 function userAgent(contact: string) {
-  return `EcoRailPlanner/0.3.0 (${contact})`;
+  return `EcoRailPlanner/0.3.0.1 (${contact})`;
 }
 
 function interpolate(a: Place, b: Place, fraction: number): { lat: number; lng: number } {

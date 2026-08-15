@@ -194,7 +194,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.0 Global Beta : lieux et gares découverts dynamiquement via Transitous/MOTIS. Couverture selon les données locales disponibles.</p>
+        <p className="form-hint">V0.3.0.1 Global Beta : lieux et gares découverts dynamiquement via Transitous/MOTIS. Couverture selon les données locales disponibles.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -210,7 +210,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.0 Global Beta</span>
+            <span>🌍 V0.3.0.1 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>

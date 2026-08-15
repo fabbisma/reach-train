@@ -328,7 +328,7 @@ async function evaluateStation(params: {
   }
   if (previous.length) {
     const best = [...previous].sort((a, b) =>
-      a.rail.durationMinutes - b.rail.durationMinutes || a.totalMinutes - b.totalMinutes || a.rail.changes - b.rail.changes
+      a.totalMinutes - b.totalMinutes || a.rail.durationMinutes - b.rail.durationMinutes || a.rail.changes - b.rail.changes
     )[0];
     selected.push({ ...best, departureDay: "previousDay" });
   }
@@ -447,6 +447,54 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest, targetTi
   });
 }
 
+function longestTransfer(option: JourneyOption) {
+  const values = option.rail.transfers?.map((transfer) => transfer.durationMinutes) ?? [];
+  return values.length ? Math.max(...values) : 0;
+}
+
+function keepSensiblePreviousDayOptions(
+  previous: JourneyOption[],
+  requestedDay: JourneyOption[],
+  directRoad: RoadLeg
+) {
+  if (!previous.length) return [];
+
+  const absoluteCeiling = Math.max(24 * 60, Math.round(directRoad.durationMinutes * 2.2 + 240));
+  const base = previous.filter((option) => option.totalMinutes <= absoluteCeiling);
+  if (!requestedDay.length) return base;
+
+  const bestDayTotal = Math.min(...requestedDay.map((option) => option.totalMinutes));
+  const relativeCeiling = Math.max(bestDayTotal + 8 * 60, Math.round(bestDayTotal * 1.75));
+
+  return base.filter((option) => {
+    const meaningfulDriveSaving = requestedDay.some((day) =>
+      day.drive.durationMinutes - option.drive.durationMinutes >= 60
+    );
+    const meaningfulRailSaving = requestedDay.some((day) =>
+      day.rail.durationMinutes - option.rail.durationMinutes >= 90
+    );
+
+    if (option.totalMinutes > relativeCeiling && !meaningfulDriveSaving && !meaningfulRailSaving) {
+      return false;
+    }
+
+    // Écarte les nuits entières passées en correspondance lorsqu’une bonne option
+    // le jour J existe déjà, sauf si la veille apporte un vrai gain ailleurs.
+    if (longestTransfer(option) > 8 * 60 && !meaningfulDriveSaving && !meaningfulRailSaving) {
+      return false;
+    }
+
+    const dominated = requestedDay.some((day) =>
+      day.totalMinutes <= option.totalMinutes &&
+      day.drive.durationMinutes <= option.drive.durationMinutes + 15 &&
+      day.rail.durationMinutes <= option.rail.durationMinutes &&
+      day.rail.changes <= option.rail.changes
+    );
+
+    return !dominated || meaningfulDriveSaving || meaningfulRailSaving;
+  });
+}
+
 function simplePareto(options: JourneyOption[]) {
   return options.filter((a) => !options.some((b) => {
     if (a.id === b.id) return false;
@@ -464,7 +512,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   let destination: Place | null = request.destinationPlace ?? null;
   const notes: string[] = [];
 
-  // V0.3.1 : les coordonnées sélectionnées dans l'autocomplétion sont la source
+  // V0.3.2 : les coordonnées sélectionnées dans l'autocomplétion sont la source
   // de vérité. Le géocodage texte reste seulement un filet de sécurité interne.
   if (locationProvider && (!origin || !destination)) {
     const resolved = await Promise.allSettled([
@@ -540,7 +588,8 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   });
 
   const requestedDayOptions = rawOptions.filter((option) => option.departureDay === "requestedDay");
-  const previousDayOptions = rawOptions.filter((option) => option.departureDay === "previousDay");
+  const rawPreviousDayOptions = rawOptions.filter((option) => option.departureDay === "previousDay");
+  const previousDayOptions = keepSensiblePreviousDayOptions(rawPreviousDayOptions, requestedDayOptions, directRoad);
   const summarized = [
     ...summarizeDay(requestedDayOptions, request, targetTimeZone),
     ...summarizeDay(previousDayOptions, request, targetTimeZone)
@@ -554,9 +603,10 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const uniqueFailures = [...new Set(failures)];
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
+  notes.push("La recherche autorise train, RER, métro, tram et bus dans les correspondances, avec au moins un segment ferroviaire obligatoire.");
   notes.push("La recherche essaie d’abord jusqu’à 3 correspondances et peut élargir automatiquement jusqu’à 5 si aucune solution n’est trouvée.");
   notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
-  if (request.mode === "arriveBy") notes.push("Les mêmes critères sont affichés séparément pour un départ le jour J et pour un départ la veille lorsqu'une solution existe.");
+  if (request.mode === "arriveBy") notes.push("La veille n’est affichée que si elle reste raisonnable ou apporte un avantage réel par rapport aux solutions du jour J ; les trajets dominés ou avec attentes nocturnes absurdes sont masqués.");
   notes.push(`Les gares candidates peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
   notes.push(`Fuseaux détectés : départ ${originTimeZone} · destination ${destinationTimeZone}.`);
   notes.push("Les coûts et le CO₂ restent des estimations. La comparaison 100 % voiture utilise le même provider routier que les accès aux gares.");

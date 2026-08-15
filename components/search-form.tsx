@@ -38,14 +38,28 @@ function fmtDelta(minutes: number) {
 
 const labelText = {
   closestStation: "🚗 Gare la plus proche",
-  fastestRailWithinLimit: "⏱️ Train le plus court · dans le périmètre",
-  fastestRailExtended: "🚙⏱️ Train le plus court · conduite étendue",
+  fastestRailWithinLimit: "⏱️ Transport public le plus court · dans le périmètre",
+  fastestRailExtended: "🚙⏱️ Transport public le plus court · conduite étendue",
   fastestTotal: "🏁 Trajet total le plus court"
 } as const;
 
 function recommendationLabel(label: RecommendationBadge) {
   const medal = label.rank === 1 ? "🥇" : label.rank === 2 ? "🥈" : "🥉";
   return `${medal} ${labelText[label.criterion]}`;
+}
+
+function segmentModeLabel(mode?: string) {
+  switch (mode) {
+    case "SUBWAY": return "🚇 Métro";
+    case "SUBURBAN": return "🚈 RER / train suburbain";
+    case "TRAM": return "🚊 Tram";
+    case "BUS": return "🚌 Bus";
+    case "COACH": return "🚌 Car";
+    case "FERRY": return "⛴️ Ferry";
+    case "FUNICULAR": return "🚞 Funiculaire";
+    case "AERIAL_LIFT": return "🚠 Téléphérique";
+    default: return "🚆 Train";
+  }
 }
 
 function RailDetails({ option, origin, destination }: { option: JourneyOption; origin: Place; destination: Place }) {
@@ -59,7 +73,7 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
         <span>🚆</span>
         <div>
           <strong>{firstStation} → {lastStation}</strong>
-          <small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
+          <small>Train + transports locaux · {fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
         </div>
       </div>
 
@@ -72,7 +86,7 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
             return (
               <div className="rail-segment-block" key={`${segment.fromStation}-${segment.toStation}-${segment.departureAt}-${index}`}>
                 <div className="rail-segment">
-                  <div className="segment-kicker">Train {index + 1}{segment.service ? ` · ${segment.service}` : ""}</div>
+                  <div className="segment-kicker">{segmentModeLabel(segment.mode)} {index + 1}{segment.service ? ` · ${segment.service}` : ""}</div>
                   <strong className="segment-route">{segment.fromStation} → {segment.toStation}</strong>
                   <div className="segment-times">
                     <span>Départ <b>{fmtDateTime(segment.departureAt, segment.fromTimeZone ?? option.station.timeZone ?? origin.timeZone)}</b></span>
@@ -305,7 +319,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.1 Global Beta : départ et destination doivent être confirmés avant calcul. La recherche ferroviaire élargit automatiquement ses critères si nécessaire.</p>
+        <p className="form-hint">V0.3.2 Global Beta : lieux confirmés, train + RER/métro/tram/bus, et filtrage des trajets absurdes de la veille.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -321,7 +335,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.1 Global Beta</span>
+            <span>🌍 V0.3.2 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -340,7 +354,7 @@ export default function SearchForm() {
           )}
 
           {result.options.length === 0 ? (
-            <div className="empty">Aucune solution ferroviaire trouvée pour le jour J ou la veille.</div>
+            <div className="empty">Aucune solution train + transports publics trouvée pour le jour J ou la veille.</div>
           ) : (
             <>
               {[
@@ -415,7 +429,7 @@ export default function SearchForm() {
 
           <div className="notes">
             <p>• {result.candidateStationCount} gares candidates testées ; {result.viableStationCount} ont fourni au moins une solution. Les 3 meilleurs candidats par critère sont affichés avec déduplication.</p>
-            <p>• Les lieux et les gares sont désormais recherchés dynamiquement. La mini-carte conserve la liaison voiture puis le tracé ferroviaire détaillé lorsque MOTIS le fournit.</p>
+            <p>• Les lieux et les gares sont désormais recherchés dynamiquement. La mini-carte conserve la liaison voiture puis le tracé des transports publics détaillé lorsque MOTIS le fournit.</p>
             <p>• Données transport : <a href="https://transitous.org/sources/" target="_blank" rel="noreferrer">sources Transitous/MOTIS</a>.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>

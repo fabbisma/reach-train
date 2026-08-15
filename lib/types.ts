@@ -58,6 +58,7 @@ export type RailTransfer = {
 };
 
 export type RailSegment = {
+  mode?: string;
   fromStation: string;
   toStation: string;
   departureAt: string;

@@ -344,7 +344,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .rail-map-head span { text-align: left; }
 }
 
-/* V0.3.1 — validation obligatoire des lieux */
+/* V0.3.2 — validation obligatoire des lieux */
 .location-field { position: relative; min-width: 0; }
 .location-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 7px; }
 .location-input-wrap { position: relative; }

@@ -36,13 +36,13 @@ const RAIL_MODES = new Set([
 export class TransitousRailProvider implements RailProvider {
   constructor(private readonly contact: string) {}
 
-  async journey(params: {
+  private async fetchItineraries(params: {
     station: Station;
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
-  }): Promise<RailLeg | null> {
+  }): Promise<TransitousItinerary[]> {
     const query = new URLSearchParams({
       fromPlace: `${params.station.lat},${params.station.lng}`,
       toPlace: `${params.destination.lat},${params.destination.lng}`,
@@ -60,7 +60,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.1.5 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.1.6 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -72,26 +72,54 @@ export class TransitousRailProvider implements RailProvider {
     }
 
     const json = (await response.json()) as TransitousResponse;
-    const itineraries = json.itineraries ?? [];
-    if (!itineraries.length) return null;
-
     const target = new Date(params.searchAt).getTime();
-    const valid = itineraries.filter((itinerary) => {
+
+    return (json.itineraries ?? []).filter((itinerary) => {
+      const transfers = Math.max(0, itinerary.transfers);
+      if (transfers > params.maxTransfers) return false;
       if (params.mode === "arriveBy") return new Date(itinerary.endTime).getTime() <= target;
       return new Date(itinerary.startTime).getTime() >= target;
     });
+  }
 
-    const withinTransferLimit = valid.filter((itinerary) => Math.max(0, itinerary.transfers) <= params.maxTransfers);
-    if (!withinTransferLimit.length) return null;
+  private bestItinerary(
+    itineraries: TransitousItinerary[],
+    mode: "arriveBy" | "departAt"
+  ): TransitousItinerary | undefined {
+    return [...itineraries].sort((a, b) => {
+      // Le nombre demandé est un plafond. On privilégie d'abord le moins de
+      // correspondances : 1 signifie donc "direct OU 1 correspondance".
+      const transferDelta = Math.max(0, a.transfers) - Math.max(0, b.transfers);
+      if (transferDelta !== 0) return transferDelta;
 
-    const itinerary = [...withinTransferLimit].sort((a, b) => {
-      if (params.mode === "arriveBy") {
-        // Pour une heure d'arrivée imposée, on privilégie le départ le plus tardif.
+      if (mode === "arriveBy") {
         return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
       }
-      // Pour un départ imposé, on privilégie l'arrivée la plus tôt.
       return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
     })[0];
+  }
+
+  async journey(params: {
+    station: Station;
+    destination: Place;
+    searchAt: string;
+    mode: "arriveBy" | "departAt";
+    maxTransfers: number;
+  }): Promise<RailLeg | null> {
+    let itineraries = await this.fetchItineraries(params);
+    if (!itineraries.length) return null;
+
+    // MOTIS peut ne retourner que les itinéraires optimaux pour le plafond
+    // demandé. Si maxTransfers > 0 et qu'aucun direct n'est présent dans cette
+    // réponse, on fait une vérification ciblée en direct-only. Cela garantit
+    // que "1 correspondance max" n'efface pas un train direct existant.
+    if (params.maxTransfers > 0 && !itineraries.some((itinerary) => Math.max(0, itinerary.transfers) === 0)) {
+      const directItineraries = await this.fetchItineraries({ ...params, maxTransfers: 0 });
+      if (directItineraries.length) itineraries = [...directItineraries, ...itineraries];
+    }
+
+    const itinerary = this.bestItinerary(itineraries, params.mode);
+    if (!itinerary) return null;
 
     const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
     const services = [...new Set(

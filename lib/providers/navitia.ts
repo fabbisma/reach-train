@@ -49,7 +49,24 @@ export class NavitiaRailProvider implements RailProvider {
       }>;
     };
 
-    const journey = json.journeys?.find((item) => (item.nb_transfers ?? 0) <= params.maxTransfers);
+    const eligible = (json.journeys ?? [])
+      .filter((item) => (item.nb_transfers ?? 0) <= params.maxTransfers)
+      .sort((a, b) => {
+        // max_nb_transfers est un plafond : on privilégie les directs lorsqu'ils existent.
+        const transferDelta = (a.nb_transfers ?? 0) - (b.nb_transfers ?? 0);
+        if (transferDelta !== 0) return transferDelta;
+
+        const aDeparture = parseNavitiaDate(a.departure_date_time);
+        const bDeparture = parseNavitiaDate(b.departure_date_time);
+        const aArrival = parseNavitiaDate(a.arrival_date_time);
+        const bArrival = parseNavitiaDate(b.arrival_date_time);
+        if (params.mode === "arriveBy") {
+          return new Date(bDeparture).getTime() - new Date(aDeparture).getTime();
+        }
+        return new Date(aArrival).getTime() - new Date(bArrival).getTime();
+      });
+
+    const journey = eligible[0];
     if (!journey) return null;
 
     const railMeters = (journey.distances?.train ?? 0) + (journey.distances?.rail_shuttle ?? 0);

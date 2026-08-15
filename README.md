@@ -97,3 +97,11 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - `0` = trajet ferroviaire direct uniquement.
 - Valeurs proposées : 0, 1, 2 ou 3 correspondances.
 - Le filtre est envoyé directement aux providers ferroviaires (Transitous/MOTIS et Navitia), puis vérifié une seconde fois dans le provider.
+
+
+## V0.1.6 — correspondances = plafond
+
+- `0` = direct uniquement.
+- `1` = jusqu'à 1 correspondance, donc les trains directs sont aussi éligibles.
+- Lorsqu'une gare offre à la fois un direct et un trajet avec correspondance, le moteur privilégie le direct ; à nombre de correspondances égal, il garde le meilleur horaire.
+- Même comportement pour Transitous/MOTIS et Navitia.

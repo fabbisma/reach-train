@@ -112,9 +112,9 @@ export default function SearchForm() {
             <span>Correspondances max</span>
             <select value={form.maxTransfers} onChange={(e) => setForm({ ...form, maxTransfers: Number(e.target.value) })}>
               <option value={0}>0 · Direct uniquement</option>
-              <option value={1}>1 correspondance</option>
-              <option value={2}>2 correspondances</option>
-              <option value={3}>3 correspondances</option>
+              <option value={1}>Jusqu'à 1 correspondance · direct inclus</option>
+              <option value={2}>Jusqu'à 2 correspondances · direct inclus</option>
+              <option value={3}>Jusqu'à 3 correspondances · direct inclus</option>
             </select>
           </label>
           <label>
@@ -127,7 +127,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.5 : filtre de correspondances actif · l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
+        <p className="form-hint">V0.1.6 : correspondances = maximum autorisé, trajets directs inclus · l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}

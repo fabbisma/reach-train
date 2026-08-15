@@ -1,0 +1,69 @@
+# EcoRail Planner — V0.1
+
+MVP d'un planificateur multimodal qui choisit automatiquement une gare stratégique entre le départ et la destination, puis calcule l'heure conseillée de départ en voiture.
+
+## Ce qui fonctionne déjà
+
+- Mode **Arriver avant** et **Partir vers**.
+- Sélection automatique de gares candidates.
+- Limite de temps de conduite jusqu'à la gare.
+- Calcul voiture → gare → marge → train → destination.
+- Heure de départ conseillée calculée à rebours en mode `arriveBy`.
+- Élimination des solutions dominées (Pareto temps / CO₂ / coût).
+- Labels : recommandé, plus rapide, CO₂ mini, moins cher.
+- Mode démo sans aucune clé API.
+- Providers prêts pour Google Routes et Navitia.
+
+## Démarrer en local
+
+```bash
+npm install
+npm run dev
+```
+
+Puis ouvrir `http://localhost:3000`.
+
+## Déployer sur Vercel
+
+Le projet utilise Next.js 16.3.1 (App Router) et React 19.2.4. Les horaires saisis sont interprétés en Europe/Paris pour le MVP France.
+
+Le projet est un Next.js App Router standard. Une fois le dépôt GitHub importé dans Vercel, chaque push déclenche un déploiement.
+
+## Mode réel
+
+Copier `.env.example` vers `.env.local` et ajouter :
+
+```bash
+NAVITIA_TOKEN=...
+GOOGLE_MAPS_API_KEY=...
+```
+
+Sans ces variables, l'application utilise automatiquement des providers simulés.
+
+### Important pour V0.1
+
+Le provider Navitia actuel est volontairement minimal : il utilise les coordonnées de la gare et de la destination. Avant production, il faudra :
+
+1. ajouter une vraie géocodification/autocomplétion pour toutes les adresses ;
+2. vérifier le mapping des distances ferroviaires selon les réponses Navitia ;
+3. charger la liste complète des gares SNCF depuis GTFS ;
+4. séparer temps de marche/parking et marge de sécurité par gare ;
+5. remplacer les estimations coût/CO₂ par des sources réelles ;
+6. ajouter la voiture seule comme référence directe dans le résultat.
+
+## Structure
+
+```text
+app/
+  api/search/route.ts       API POST /api/search
+  page.tsx                  écran principal
+components/
+  search-form.tsx           formulaire + résultats
+lib/
+  search-engine.ts          moteur d'optimisation
+  stations.ts               gares / lieux démo
+  providers/
+    mock.ts                 mode démo
+    google-routes.ts        trajet routier réel
+    navitia.ts              trajet ferroviaire réel
+```

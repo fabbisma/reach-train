@@ -27,6 +27,10 @@ type NavitiaSection = {
     coord?: { lat?: string; lon?: string };
     stop_point?: { coord?: { lat?: string; lon?: string } };
   };
+  geojson?: {
+    type?: string;
+    coordinates?: number[][];
+  };
   display_informations?: {
     name?: string;
     label?: string;
@@ -70,7 +74,10 @@ function navitiaSegments(sections: NavitiaSection[] = []): RailSegment[] {
         fromLat: from.lat,
         fromLng: from.lng,
         toLat: to.lat,
-        toLng: to.lng
+        toLng: to.lng,
+        geometry: section.geojson?.coordinates
+          ?.filter((coord) => Array.isArray(coord) && coord.length >= 2 && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1])))
+          .map((coord) => ({ lng: Number(coord[0]), lat: Number(coord[1]) }))
       };
     });
 }

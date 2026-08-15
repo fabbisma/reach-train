@@ -53,6 +53,7 @@ export type RailSegment = {
   toLat?: number;
   toLng?: number;
   realtime?: boolean;
+  geometry?: LatLng[];
 };
 
 export type RailLeg = {

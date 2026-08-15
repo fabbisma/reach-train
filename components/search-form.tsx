@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import RailMap from "@/components/rail-map";
 import type { JourneyOption, Place, RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
 
 function tomorrowLocal() {
@@ -47,83 +48,6 @@ function recommendationLabel(label: RecommendationBadge) {
   return `${medal} ${labelText[label.criterion]}`;
 }
 
-type GeoPoint = { lat: number; lng: number; name: string };
-
-function railGeoPoints(option: JourneyOption, destination: Place): GeoPoint[] {
-  const raw: GeoPoint[] = [];
-  for (const segment of option.rail.segments ?? []) {
-    if (segment.fromLat != null && segment.fromLng != null) {
-      raw.push({ lat: segment.fromLat, lng: segment.fromLng, name: segment.fromStation });
-    }
-    if (segment.toLat != null && segment.toLng != null) {
-      raw.push({ lat: segment.toLat, lng: segment.toLng, name: segment.toStation });
-    }
-  }
-
-  if (raw.length < 2) {
-    return [
-      { lat: option.station.lat, lng: option.station.lng, name: option.station.name },
-      { lat: destination.lat, lng: destination.lng, name: destination.name }
-    ];
-  }
-
-  return raw.filter((point, index) => {
-    if (index === 0) return true;
-    const previous = raw[index - 1];
-    return Math.abs(point.lat - previous.lat) > 0.0001 || Math.abs(point.lng - previous.lng) > 0.0001 || point.name !== previous.name;
-  });
-}
-
-function MiniRailMap({ option, destination }: { option: JourneyOption; destination: Place }) {
-  const points = railGeoPoints(option, destination);
-  const width = 340;
-  const height = 150;
-  const padding = 18;
-  const meanLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length;
-  const lonFactor = Math.max(0.35, Math.cos((meanLat * Math.PI) / 180));
-  const projected = points.map((point) => ({ ...point, px: point.lng * lonFactor, py: point.lat }));
-  const minX = Math.min(...projected.map((point) => point.px));
-  const maxX = Math.max(...projected.map((point) => point.px));
-  const minY = Math.min(...projected.map((point) => point.py));
-  const maxY = Math.max(...projected.map((point) => point.py));
-  const rangeX = Math.max(0.01, maxX - minX);
-  const rangeY = Math.max(0.01, maxY - minY);
-  const scale = Math.min((width - 2 * padding) / rangeX, (height - 2 * padding) / rangeY);
-  const usedWidth = rangeX * scale;
-  const usedHeight = rangeY * scale;
-  const offsetX = (width - usedWidth) / 2;
-  const offsetY = (height - usedHeight) / 2;
-  const plotted = projected.map((point) => ({
-    ...point,
-    x: offsetX + (point.px - minX) * scale,
-    y: height - (offsetY + (point.py - minY) * scale)
-  }));
-  const path = plotted.map((point) => `${point.x},${point.y}`).join(" ");
-  const routeNames = points.map((point) => point.name).filter((name, index, all) => index === 0 || name !== all[index - 1]);
-
-  return (
-    <div className="mini-rail-map" aria-label={`Schéma géographique du train : ${routeNames.join(" vers ")}`}>
-      <div className="mini-map-title">🗺️ Parcours ferroviaire · schéma géographique</div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img">
-        <polyline points={path} fill="none" className="mini-map-line" />
-        {plotted.map((point, index) => (
-          <g key={`${point.name}-${index}`}>
-            <circle cx={point.x} cy={point.y} r={index === 0 || index === plotted.length - 1 ? 6 : 5} className="mini-map-point" />
-            {index > 0 && index < plotted.length - 1 && (
-              <text x={point.x} y={point.y + 3} textAnchor="middle" className="mini-map-index">{index}</text>
-            )}
-          </g>
-        ))}
-      </svg>
-      <div className="mini-map-caption">
-        <strong>{routeNames[0]}</strong>
-        {routeNames.slice(1, -1).map((name, index) => <span key={`${name}-${index}`}>→ {index + 1}. {name}</span>)}
-        {routeNames.length > 1 && <strong>→ {routeNames[routeNames.length - 1]}</strong>}
-      </div>
-    </div>
-  );
-}
-
 function RailDetails({ option, destination }: { option: JourneyOption; destination: Place }) {
   const segments = option.rail.segments ?? [];
   const firstStation = segments[0]?.fromStation ?? option.station.name;
@@ -139,7 +63,7 @@ function RailDetails({ option, destination }: { option: JourneyOption; destinati
         </div>
       </div>
 
-      <MiniRailMap option={option} destination={destination} />
+      <RailMap option={option} destination={destination} />
 
       {segments.length > 0 ? (
         <div className="rail-segments">
@@ -270,7 +194,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.7.3 : segments ferroviaires détaillés, comparaison 100 % voiture et mini-carte géographique légère.</p>
+        <p className="form-hint">V0.2.8 : vraie mini-carte OpenStreetMap avec tracé ferroviaire, segments détaillés et comparaison 100 % voiture.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -286,7 +210,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🧩 V0.2.7.3</span>
+            <span>🧩 V0.2.8</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -380,7 +304,7 @@ export default function SearchForm() {
 
           <div className="notes">
             <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; les 3 meilleurs candidats par critère sont affichés, avec déduplication des gares.</p>
-            <p>• La mini-carte est un schéma géographique des gares des segments ferroviaires : elle n’ajoute aucun appel cartographique supplémentaire.</p>
+            <p>• La mini-carte utilise un fond OpenStreetMap. Avec Transitous, le tracé ferroviaire détaillé est utilisé quand MOTIS fournit sa géométrie ; sinon la carte relie les gares connues.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

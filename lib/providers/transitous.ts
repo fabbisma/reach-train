@@ -19,6 +19,11 @@ type TransitousLeg = {
   endTime?: string;
   from?: TransitousPlace;
   to?: TransitousPlace;
+  legGeometry?: {
+    points?: string;
+    precision?: number;
+    length?: number;
+  };
 };
 
 type TransitousItinerary = {
@@ -43,6 +48,36 @@ const RAIL_MODES = new Set([
   "SUBURBAN",
   "SUBWAY"
 ]);
+
+
+function decodePolyline(encoded: string, precision = 6): Array<{ lat: number; lng: number }> {
+  if (!encoded) return [];
+  const coordinates: Array<{ lat: number; lng: number }> = [];
+  const factor = 10 ** precision;
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+
+  const decodeValue = () => {
+    let result = 0;
+    let shift = 0;
+    let byte = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20 && index <= encoded.length);
+    return (result & 1) ? ~(result >> 1) : (result >> 1);
+  };
+
+  while (index < encoded.length) {
+    lat += decodeValue();
+    lng += decodeValue();
+    coordinates.push({ lat: lat / factor, lng: lng / factor });
+  }
+
+  return coordinates;
+}
 
 function serviceName(leg?: TransitousLeg) {
   if (!leg) return undefined;
@@ -72,7 +107,10 @@ function railSegments(railLegs: TransitousLeg[]): RailSegment[] {
       fromLng: leg.from?.lon,
       toLat: leg.to?.lat,
       toLng: leg.to?.lon,
-      realtime: leg.realTime === true
+      realtime: leg.realTime === true,
+      geometry: leg.legGeometry?.points
+        ? decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6)
+        : undefined
     } satisfies RailSegment];
   });
 }
@@ -121,14 +159,14 @@ export class TransitousRailProvider implements RailProvider {
       maxTransfers: String(params.maxTransfers),
       timetableView: "false",
       radius: "350",
-      detailedLegs: "false",
+      detailedLegs: "true",
       joinInterlinedLegs: "true",
       language: "fr"
     });
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.7 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.2.8 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)

@@ -1,10 +1,23 @@
-EcoRail Planner V0.2.7.3 — hotfix cumulatif
+EcoRail Planner V0.2.8 — hotfix carte réelle
 
-Remplacer dans GitHub TOUS les fichiers présents dans cette archive en conservant leurs chemins.
-Ce correctif remet ensemble les fichiers nécessaires à :
-- la mini-carte ferroviaire,
-- le détail gare de départ → gare d'arrivée pour chaque train,
-- la comparaison avec le trajet 100 % voiture,
-- les types RailSegment/segments/directCar correspondants.
+Remplacer/ajouter TOUS les fichiers de cette archive en conservant exactement leurs chemins.
 
-Après déploiement, relancer une recherche. Dans la ligne des providers/résultats, le badge « 🧩 V0.2.7.3 » doit apparaître. S'il n'apparaît pas, la nouvelle interface n'est pas celle servie par le déploiement courant.
+Fichiers :
+- package.json                         (ajoute Leaflet 1.9.4)
+- app/layout.tsx                      (charge le CSS Leaflet)
+- app/globals.css                     (styles de la vraie mini-carte)
+- components/search-form.tsx          (utilise la nouvelle carte, badge V0.2.8)
+- components/rail-map.tsx             (NOUVEAU : carte Leaflet/OpenStreetMap)
+- lib/types.ts                        (géométrie de segment)
+- lib/providers/transitous.ts         (récupère et décode legGeometry MOTIS)
+- lib/providers/navitia.ts            (utilise geojson si disponible)
+
+Important : components/rail-map.tsx est un NOUVEAU fichier à créer dans GitHub.
+Vercel installera automatiquement la nouvelle dépendance Leaflet à partir de package.json.
+
+Comportement :
+- fond de carte OpenStreetMap réel ;
+- zoom auto sur le trajet ;
+- marqueurs gare de départ / correspondances / arrivée ;
+- tracé MOTIS détaillé lorsque Transitous fournit legGeometry ;
+- sinon fallback sur les coordonnées des gares.

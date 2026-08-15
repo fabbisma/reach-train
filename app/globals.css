@@ -343,3 +343,67 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .rail-map-head { align-items: flex-start; flex-direction: column; gap: 3px; }
   .rail-map-head span { text-align: left; }
 }
+
+/* V0.3.1 — validation obligatoire des lieux */
+.location-field { position: relative; min-width: 0; }
+.location-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 7px; }
+.location-input-wrap { position: relative; }
+.location-input-wrap input { padding-right: 42px; }
+.location-state {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: #f0f4f1;
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+.location-state.confirmed { background: var(--green-soft); color: var(--green-dark); }
+.location-confirmation {
+  display: block;
+  margin-top: 6px;
+  color: #9a6a24;
+  font-size: 10px;
+  font-weight: 700;
+}
+.location-confirmation.confirmed { color: var(--green); }
+.location-suggestions {
+  position: absolute;
+  z-index: 1000;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 18px 45px rgba(22, 47, 32, .16);
+}
+.location-suggestion {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid #edf2ee;
+  padding: 11px 12px;
+  background: white;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.location-suggestion:last-child { border-bottom: 0; }
+button.location-suggestion:hover { background: #f2f8f4; }
+.location-suggestion > span:last-child { min-width: 0; display: block; }
+.location-suggestion strong { display: block; font-size: 12px; line-height: 1.35; }
+.location-suggestion small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+.location-suggestion.muted { color: var(--muted); font-size: 11px; cursor: default; }
+.location-kind { flex: 0 0 auto; font-size: 16px; line-height: 1.2; }
+.primary:disabled { cursor: not-allowed; }

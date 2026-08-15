@@ -154,12 +154,19 @@ export class TransitousRailProvider implements RailProvider {
     maxTransfers: number;
   }): Promise<TransitousItinerary[]> {
     const query = new URLSearchParams({
-      fromPlace: `${params.station.lat},${params.station.lng}`,
-      toPlace: `${params.destination.lat},${params.destination.lng}`,
+      fromPlace: params.station.providerStopId || `${params.station.lat},${params.station.lng}`,
+      toPlace: params.destination.sourceType === "STOP" && params.destination.sourceId
+        ? params.destination.sourceId
+        : `${params.destination.lat},${params.destination.lng}`,
+      radius: "6000",
       time: params.searchAt,
       arriveBy: params.mode === "arriveBy" ? "true" : "false",
       transitModes: "RAIL",
       directModes: "",
+      preTransitModes: "WALK",
+      postTransitModes: "WALK",
+      maxPreTransitTime: "1200",
+      maxPostTransitTime: "3600",
       maxTransfers: String(params.maxTransfers),
       timetableView: "false",
       detailedLegs: "true",
@@ -169,7 +176,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.3.0.2 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.3.1 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -198,7 +205,13 @@ export class TransitousRailProvider implements RailProvider {
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
   }): Promise<RailLeg[]> {
-    const itineraries = await this.fetchItineraries(params);
+    let itineraries = await this.fetchItineraries(params);
+    // Pour la Global Beta, 3 correspondances restent la recherche normale.
+    // Si aucune solution n'est trouvée, on élargit automatiquement à 5 plutôt
+    // que de conclure trop vite qu'un trajet ferroviaire n'existe pas.
+    if (!itineraries.length && params.maxTransfers < 5) {
+      itineraries = await this.fetchItineraries({ ...params, maxTransfers: 5 });
+    }
 
     return itineraries
       .map((itinerary) => {

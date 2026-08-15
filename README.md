@@ -1,4 +1,4 @@
-# Eco Rail Planner — V0.3.0.2 Global Beta
+# Eco Rail Planner — V0.3.1 Global Beta
 
 Clean full-project baseline rebuilt from the stable V0.2.8.1 UI/map behavior plus the V0.3 dynamic-station engine.
 
@@ -55,3 +55,13 @@ Coverage depends on the public transport data available in Transitous/MOTIS for 
 ## Environment variables
 
 See `.env.example`. Existing Vercel environment variables can be kept.
+
+
+## V0.3.1
+
+- Validation obligatoire du départ et de la destination via l’autocomplétion Transitous/MOTIS.
+- Les coordonnées sélectionnées deviennent la source de vérité du calcul.
+- Les suggestions affichent davantage de contexte administratif pour éviter les homonymes.
+- Le routage ferroviaire part du stop MOTIS exact lorsqu’il est disponible.
+- Rayon de 6 km autour de la destination pour rattacher une ville/adresse à une gare voisine.
+- Dernier kilomètre piéton autorisé jusqu’à 60 min et élargissement automatique de 3 à 5 correspondances si aucune solution n’est trouvée.

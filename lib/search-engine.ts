@@ -11,6 +11,7 @@ import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/
 const STATION_BUFFER_MINUTES = 22;
 const COMFORT_EXTRA_MINUTES = 10;
 const MAX_AUTO_TRANSFERS = 3;
+const MAX_FALLBACK_TRANSFERS = 5;
 const MAX_EXTENDED_DRIVE_MINUTES = 360;
 
 function transitousContact() {
@@ -459,14 +460,16 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const contact = transitousContact();
   const locationProvider = contact ? new TransitousLocationProvider(contact) : null;
 
-  let origin: Place | null = null;
-  let destination: Place | null = null;
+  let origin: Place | null = request.originPlace ?? null;
+  let destination: Place | null = request.destinationPlace ?? null;
   const notes: string[] = [];
 
-  if (locationProvider) {
+  // V0.3.1 : les coordonnées sélectionnées dans l'autocomplétion sont la source
+  // de vérité. Le géocodage texte reste seulement un filet de sécurité interne.
+  if (locationProvider && (!origin || !destination)) {
     const resolved = await Promise.allSettled([
-      locationProvider.resolvePlace(request.origin),
-      locationProvider.resolvePlace(request.destination)
+      origin ? Promise.resolve(origin) : locationProvider.resolvePlace(request.origin),
+      destination ? Promise.resolve(destination) : locationProvider.resolvePlace(request.destination)
     ]);
     if (resolved[0].status === "fulfilled") origin = resolved[0].value;
     if (resolved[1].status === "fulfilled") destination = resolved[1].value;
@@ -551,6 +554,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const uniqueFailures = [...new Set(failures)];
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
+  notes.push("La recherche essaie d’abord jusqu’à 3 correspondances et peut élargir automatiquement jusqu’à 5 si aucune solution n’est trouvée.");
   notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
   if (request.mode === "arriveBy") notes.push("Les mêmes critères sont affichés séparément pour un départ le jour J et pour un départ la veille lorsqu'une solution existe.");
   notes.push(`Les gares candidates peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
@@ -569,7 +573,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     viableStationCount: uniqueViableStations,
     candidateStationCount: candidates.length,
     paretoStationCount: simplePareto(rawOptions).length,
-    usedMaxTransfers: MAX_AUTO_TRANSFERS,
+    usedMaxTransfers: MAX_FALLBACK_TRANSFERS,
     providers: {
       road: { name: roadName, live: roadLive },
       rail: { name: railName, live: railLive }

@@ -1,17 +1,30 @@
-import type { Place, Station } from "@/lib/types";
+import type { LocationSuggestion, Place, Station } from "@/lib/types";
 import { haversineKm } from "@/lib/utils";
+
+type GeocodeArea = {
+  name?: string;
+  adminLevel?: number;
+  matched?: boolean;
+  unique?: boolean;
+  default?: boolean;
+};
 
 type GeocodeMatch = {
   type?: "ADDRESS" | "PLACE" | "STOP";
+  category?: string;
   name?: string;
   id?: string;
   lat?: number;
   lon?: number;
   country?: string;
+  zip?: string;
+  street?: string;
+  houseNumber?: string;
   tz?: string;
   score?: number;
   importance?: number;
   modes?: string[];
+  areas?: GeocodeArea[];
 };
 
 type MapStop = {
@@ -34,7 +47,7 @@ function normalize(value: string) {
 }
 
 function userAgent(contact: string) {
-  return `EcoRailPlanner/0.3.0.2 (${contact})`;
+  return `EcoRailPlanner/0.3.1 (${contact})`;
 }
 
 function interpolate(a: Place, b: Place, fraction: number): { lat: number; lng: number } {
@@ -73,15 +86,49 @@ function placeMatchRank(match: GeocodeMatch, query: string) {
   return exact + typeBonus + (match.score ?? 0);
 }
 
+function uniqueParts(parts: Array<string | undefined>) {
+  const seen = new Set<string>();
+  return parts.flatMap((part) => {
+    const value = part?.trim();
+    if (!value) return [];
+    const key = normalize(value);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [value];
+  });
+}
+
+function matchLabel(match: GeocodeMatch) {
+  const areas = (match.areas ?? [])
+    .filter((area) => area.name)
+    .sort((a, b) => Number(Boolean(b.default)) - Number(Boolean(a.default)) || (b.adminLevel ?? 0) - (a.adminLevel ?? 0));
+  const usefulAreas = areas
+    .filter((area, index) => area.default || area.unique || area.matched || index < 2)
+    .map((area) => area.name)
+    .slice(0, 3);
+
+  const addressPrefix = match.type === "ADDRESS"
+    ? [match.houseNumber, match.street].filter(Boolean).join(" ").trim()
+    : undefined;
+
+  return uniqueParts([
+    addressPrefix || match.name,
+    addressPrefix ? match.name : undefined,
+    match.zip,
+    ...usefulAreas,
+    match.country?.toUpperCase()
+  ]).join(" · ");
+}
+
 export class TransitousLocationProvider {
   constructor(private readonly contact: string) {}
 
-  async resolvePlace(queryText: string): Promise<Place | null> {
+  async searchPlaces(queryText: string, limit = 7): Promise<LocationSuggestion[]> {
     const query = new URLSearchParams({
       text: queryText,
       type: "ADDRESS,PLACE,STOP",
       language: "fr,en",
-      numResults: "8"
+      numResults: String(limit)
     });
 
     const response = await fetch(`${API_ROOT}/v1/geocode?${query.toString()}`, {
@@ -92,18 +139,29 @@ export class TransitousLocationProvider {
     if (!response.ok) throw new Error(`Transitous geocode error ${response.status}`);
 
     const matches = (await response.json()) as GeocodeMatch[];
-    const selected = [...matches]
-      .filter((item) => item.name && Number.isFinite(item.lat) && Number.isFinite(item.lon))
-      .sort((a, b) => placeMatchRank(b, queryText) - placeMatchRank(a, queryText))[0];
+    return [...matches]
+      .filter((item) => item.name && item.id && Number.isFinite(item.lat) && Number.isFinite(item.lon))
+      .sort((a, b) => placeMatchRank(b, queryText) - placeMatchRank(a, queryText))
+      .slice(0, limit)
+      .map((item) => ({
+        id: item.id!,
+        label: matchLabel(item),
+        type: item.type ?? "PLACE",
+        place: {
+          name: item.name!,
+          lat: item.lat!,
+          lng: item.lon!,
+          countryCode: item.country?.toUpperCase(),
+          timeZone: item.tz,
+          sourceId: item.id,
+          sourceType: item.type ?? "PLACE"
+        }
+      }));
+  }
 
-    if (!selected?.name || selected.lat == null || selected.lon == null) return null;
-    return {
-      name: selected.name,
-      lat: selected.lat,
-      lng: selected.lon,
-      countryCode: selected.country?.toUpperCase(),
-      timeZone: selected.tz
-    };
+  async resolvePlace(queryText: string): Promise<Place | null> {
+    const matches = await this.searchPlaces(queryText, 8);
+    return matches[0]?.place ?? null;
   }
 
   private async stopsInBox(center: { lat: number; lng: number }): Promise<Station[]> {
@@ -114,7 +172,6 @@ export class TransitousLocationProvider {
       grouped: "true",
       language: "fr,en"
     });
-    // On cherche des gares ferroviaires, pas les arrêts de métro/tram voisins.
     for (const mode of ["HIGHSPEED_RAIL", "LONG_DISTANCE", "NIGHT_RAIL", "REGIONAL_RAIL", "SUBURBAN"]) {
       query.append("modes", mode);
     }
@@ -129,14 +186,16 @@ export class TransitousLocationProvider {
     const stops = (await response.json()) as MapStop[];
     return stops.flatMap((stop) => {
       if (!stop.name || stop.lat == null || stop.lon == null) return [];
-      const id = stop.parentId || stop.stopId || `motis-${stop.name}-${stop.lat.toFixed(5)}-${stop.lon.toFixed(5)}`;
+      const providerStopId = stop.parentId || stop.stopId;
+      const id = providerStopId || `motis-${stop.name}-${stop.lat.toFixed(5)}-${stop.lon.toFixed(5)}`;
       return [{
         id,
         name: stop.name,
         lat: stop.lat,
         lng: stop.lon,
         importance: Math.max(0, Math.min(1, stop.importance ?? 0.25)),
-        timeZone: stop.tz
+        timeZone: stop.tz,
+        providerStopId
       } satisfies Station];
     });
   }

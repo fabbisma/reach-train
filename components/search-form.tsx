@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RailMap from "@/components/rail-map";
-import type { JourneyOption, Place, RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
+import type { JourneyOption, LocationSuggestion, Place, RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
 
 function tomorrowLocal() {
   const d = new Date();
@@ -106,6 +106,109 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
   );
 }
 
+
+function LocationField({
+  label,
+  value,
+  selected,
+  placeholder,
+  onTextChange,
+  onSelect
+}: {
+  label: string;
+  value: string;
+  selected?: Place;
+  placeholder: string;
+  onTextChange: (value: string) => void;
+  onSelect: (suggestion: LocationSuggestion) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<LocationSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 2 || (selected && q.toLowerCase().startsWith(selected.name.toLowerCase()))) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const response = await fetch(`/api/places?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const data = (await response.json()) as { suggestions?: LocationSuggestion[] };
+        setSuggestions(data.suggestions ?? []);
+        setOpen(true);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) setSuggestions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 280);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [value, selected]);
+
+  return (
+    <div className="location-field">
+      <span className="location-field-label">{label}</span>
+      <div className="location-input-wrap">
+        <input
+          value={value}
+          onChange={(e) => {
+            onTextChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 160)}
+          placeholder={placeholder}
+          autoComplete="off"
+          required
+        />
+        <span className={`location-state ${selected ? "confirmed" : ""}`} aria-hidden="true">
+          {selected ? "✓" : searching ? "…" : "⌖"}
+        </span>
+        {open && !selected && value.trim().length >= 2 && (
+          <div className="location-suggestions" role="listbox">
+            {searching && suggestions.length === 0 ? (
+              <div className="location-suggestion muted">Recherche du lieu…</div>
+            ) : suggestions.length ? suggestions.map((suggestion) => (
+              <button
+                type="button"
+                className="location-suggestion"
+                key={suggestion.id}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onSelect(suggestion);
+                  setOpen(false);
+                  setSuggestions([]);
+                }}
+              >
+                <span className="location-kind">{suggestion.type === "STOP" ? "🚉" : suggestion.type === "ADDRESS" ? "📍" : "🏙️"}</span>
+                <span>
+                  <strong>{suggestion.label}</strong>
+                  <small>{suggestion.type === "STOP" ? "Gare / arrêt" : suggestion.type === "ADDRESS" ? "Adresse" : "Ville / lieu"}</small>
+                </span>
+              </button>
+            )) : (
+              <div className="location-suggestion muted">Aucune suggestion. Essaie avec la région ou le pays.</div>
+            )}
+          </div>
+        )}
+      </div>
+      <small className={`location-confirmation ${selected ? "confirmed" : ""}`}>
+        {selected ? `✓ Confirmé · ${selected.name}${selected.countryCode ? ` · ${selected.countryCode}` : ""}` : "Sélection obligatoire dans la liste de suggestions"}
+      </small>
+    </div>
+  );
+}
+
 export default function SearchForm() {
   const [form, setForm] = useState<SearchRequest>({
     origin: "Courlaoux",
@@ -158,14 +261,22 @@ export default function SearchForm() {
         </div>
 
         <div className="form-grid">
-          <label>
-            <span>Départ</span>
-            <input value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value })} placeholder="Ville, adresse ou lieu de départ" required />
-          </label>
-          <label>
-            <span>Destination</span>
-            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Ville, adresse ou lieu d’arrivée" required />
-          </label>
+          <LocationField
+            label="Départ"
+            value={form.origin}
+            selected={form.originPlace}
+            placeholder="Ville, adresse ou lieu de départ"
+            onTextChange={(value) => setForm({ ...form, origin: value, originPlace: undefined })}
+            onSelect={(suggestion) => setForm({ ...form, origin: suggestion.label, originPlace: suggestion.place })}
+          />
+          <LocationField
+            label="Destination"
+            value={form.destination}
+            selected={form.destinationPlace}
+            placeholder="Ville, adresse ou lieu d’arrivée"
+            onTextChange={(value) => setForm({ ...form, destination: value, destinationPlace: undefined })}
+            onSelect={(suggestion) => setForm({ ...form, destination: suggestion.label, destinationPlace: suggestion.place })}
+          />
           <label>
             <span>Date</span>
             <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
@@ -193,8 +304,8 @@ export default function SearchForm() {
           </label>
         </div>
 
-        <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.0.2 Global Beta : lieux et gares découverts dynamiquement via Transitous/MOTIS. Couverture selon les données locales disponibles.</p>
+        <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
+        <p className="form-hint">V0.3.1 Global Beta : départ et destination doivent être confirmés avant calcul. La recherche ferroviaire élargit automatiquement ses critères si nécessaire.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -210,7 +321,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.0.2 Global Beta</span>
+            <span>🌍 V0.3.1 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>

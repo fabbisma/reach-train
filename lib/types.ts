@@ -10,6 +10,15 @@ export type Place = LatLng & {
   name: string;
   countryCode?: string;
   timeZone?: string;
+  sourceId?: string;
+  sourceType?: "ADDRESS" | "PLACE" | "STOP";
+};
+
+export type LocationSuggestion = {
+  id: string;
+  label: string;
+  type: "ADDRESS" | "PLACE" | "STOP";
+  place: Place;
 };
 
 export type Station = LatLng & {
@@ -17,11 +26,14 @@ export type Station = LatLng & {
   name: string;
   importance: number;
   timeZone?: string;
+  providerStopId?: string;
 };
 
 export type SearchRequest = {
   origin: string;
   destination: string;
+  originPlace?: Place;
+  destinationPlace?: Place;
   date: string;
   time: string;
   mode: SearchMode;

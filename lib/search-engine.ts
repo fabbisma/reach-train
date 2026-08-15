@@ -565,15 +565,19 @@ async function progressiveTransferSearch(params: {
   previousDateKey: string;
 }): Promise<ProgressiveResult> {
   const failures: string[] = [];
+  const sameDayByStation = new Map<string, JourneyOption>();
   const previousByStation = new Map<string, JourneyOption>();
+  let usedMaxTransfers = 0;
   let previousDayMaxTransfers = 0;
 
-  // On stoppe dès qu'un niveau donne des solutions le jour demandé :
-  // direct d'abord, puis 1, 2 et 3 correspondances seulement si nécessaire.
+  // Une solution « parfaite » est un direct le jour demandé dont la conduite
+  // reste dans la préférence utilisateur. Si le seul direct est très loin
+  // (Karlsruhe, Bâle, etc.), on le conserve MAIS on continue à explorer les
+  // gares plus proches avec 1, puis 2, puis 3 correspondances.
   for (let maxTransfers = 0; maxTransfers <= MAX_AUTO_TRANSFERS; maxTransfers += 1) {
-    // Au niveau direct uniquement, on élargit volontairement à des hubs très
-    // éloignés. Aux niveaux 1/2/3 correspondances, on revient à la liste
-    // compacte pour conserver de bonnes performances.
+    // Le niveau 0 élargit uniquement la recherche des directs aux grands hubs.
+    // Les niveaux suivants restent sur la liste compacte de gares proches /
+    // stratégiques afin de limiter le nombre d'appels API.
     const levelCandidates = maxTransfers === 0
       ? mergeCandidates(params.candidates, params.directCandidates)
       : params.candidates;
@@ -593,26 +597,45 @@ async function progressiveTransferSearch(params: {
 
     const sameDay = sameDepartureDay(batch.options, params.requestedDateKey);
     const previous = sameDepartureDay(batch.options, params.previousDateKey);
+
+    if (sameDay.length) {
+      mergeByStation(sameDayByStation, sameDay);
+      usedMaxTransfers = maxTransfers;
+    }
     if (previous.length) {
       mergeByStation(previousByStation, previous);
       previousDayMaxTransfers = maxTransfers;
     }
 
-    if (sameDay.length) {
-      return {
-        sameDay,
-        previousDay: [...previousByStation.values()],
-        usedMaxTransfers: maxTransfers,
-        previousDayMaxTransfers,
-        failures
-      };
-    }
+    const accumulatedSameDay = [...sameDayByStation.values()];
+
+    // Si un direct est accessible dans la préférence voiture, inutile
+    // d'alourdir la recherche avec davantage de correspondances.
+    const hasPerfectDirect = accumulatedSameDay.some((option) =>
+      option.rail.changes === 0 && option.driveLimitExceededBy === 0
+    );
+    if (hasPerfectDirect) break;
+
+    // Dès qu'on a conservé un direct éloigné ET trouvé une alternative plus
+    // proche dans la limite voiture, on a assez de matière pour la synthèse :
+    // direct éloigné + gare proche + meilleur compromis.
+    const hasDirect = accumulatedSameDay.some((option) => option.rail.changes === 0);
+    const hasPreferredDriveAlternative = accumulatedSameDay.some((option) =>
+      option.driveLimitExceededBy === 0 && option.rail.changes <= maxTransfers
+    );
+    if (maxTransfers > 0 && hasDirect && hasPreferredDriveAlternative) break;
+
+    // S'il n'existe aucun direct, on s'arrête au premier niveau de
+    // correspondances qui fournit au moins deux options dans la préférence
+    // voiture. Cela garde le calcul rapide tout en évitant une seule carte.
+    const preferredAlternatives = accumulatedSameDay.filter((option) => option.driveLimitExceededBy === 0);
+    if (maxTransfers > 0 && !hasDirect && preferredAlternatives.length >= 2) break;
   }
 
   return {
-    sameDay: [],
+    sameDay: [...sameDayByStation.values()],
     previousDay: [...previousByStation.values()],
-    usedMaxTransfers: MAX_AUTO_TRANSFERS,
+    usedMaxTransfers,
     previousDayMaxTransfers,
     failures
   };
@@ -775,10 +798,10 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   if (uniqueFailures.length) {
     notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${uniqueFailures.join(", ")}.`);
   }
-  notes.push(`Correspondances automatiques : le moteur s'est arrêté à ${usedMaxTransfers} correspondance${usedMaxTransfers > 1 ? "s" : ""} maximum.`);
+  notes.push(`Correspondances automatiques : le moteur a exploré jusqu’à ${usedMaxTransfers} correspondance${usedMaxTransfers > 1 ? "s" : ""} maximum pour compléter les alternatives utiles.`);
   notes.push(`Recherche directe élargie : ${directCandidates.length} grands hubs sont vérifiés même au-delà de la préférence voiture (jusqu'à ${compactDuration(MAX_DIRECT_HUB_DRIVE_MINUTES)}).`);
   if (request.mode === "arriveBy") {
-    notes.push("Ordre de recherche : direct sur gares proches + grands hubs longue distance → 1 → 2 → 3 correspondances sur la liste compacte ; la veille est gardée en secours ; puis +1 h et +2 h sont testés pour préserver un départ le jour même.");
+    notes.push("Ordre de recherche : le meilleur direct est conservé même s’il est loin ; s’il dépasse la préférence voiture, le moteur continue sur les gares plus proches avec 1 → 2 → 3 correspondances jusqu’à obtenir une alternative utile. La veille reste un secours, puis +1 h et +2 h sont testés.");
     notes.push("Synthèse affichée : gare la plus proche, train le plus direct, meilleur compromis et arrivée la plus proche de l’heure demandée parmi les trajets trouvés.");
   } else {
     notes.push("Synthèse affichée : gare la plus proche, train le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");

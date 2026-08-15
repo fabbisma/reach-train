@@ -1,4 +1,4 @@
-# EcoRail Planner — V0.2.0
+# EcoRail Planner — V0.2.3
 
 MVP d'un planificateur multimodal qui choisit automatiquement une gare stratégique entre le départ et la destination, puis calcule l'heure conseillée de départ en voiture.
 
@@ -159,3 +159,12 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - Ajout de Freiburg (Breisgau) Hbf, Zürich HB, Karlsruhe Hbf et Mannheim Hbf à la base de hubs, en plus de Belfort, Mulhouse, Strasbourg et Bâle.
 - La recommandation ferroviaire choisit désormais, parmi le nombre minimal de correspondances trouvé, la gare la plus proche en voiture.
 - Les paliers avec 1, 2 ou 3 correspondances conservent la liste compacte afin de limiter le temps de calcul.
+
+
+## V0.2.3 — direct éloigné + alternatives proches
+
+- Un direct lointain n'arrête plus la recherche.
+- Le meilleur direct est conservé, même hors limite voiture.
+- Si ce direct dépasse la préférence voiture, le moteur continue avec 1, puis 2, puis 3 correspondances sur les gares proches.
+- La recherche s'arrête dès qu'elle dispose d'un direct et d'au moins une alternative dans la limite voiture, ou de plusieurs alternatives proches si aucun direct n'existe.
+- Objectif : afficher simultanément le direct le plus accessible, la gare la plus proche et le meilleur compromis.

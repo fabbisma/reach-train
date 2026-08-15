@@ -136,7 +136,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.2 : l’app cherche d’abord les directs, y compris depuis de grands hubs éloignés, puis 1, 2 ou 3 correspondances seulement si nécessaire.</p>
+        <p className="form-hint">V0.2.3 : l’app conserve le meilleur direct même s’il est loin, puis cherche aussi des gares plus proches avec correspondances lorsqu’aucun direct ne respecte la préférence voiture.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}

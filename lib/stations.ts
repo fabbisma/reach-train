@@ -9,19 +9,25 @@ export const STATIONS: Station[] = [
   { id: "fr-dijon", name: "Dijon-Ville", lat: 47.3234, lng: 5.0271, importance: 0.9 },
   { id: "fr-besancon-tgv", name: "Besançon Franche-Comté TGV", lat: 47.3077, lng: 5.9569, importance: 0.86 },
   { id: "fr-creusot-tgv", name: "Le Creusot Montceau TGV", lat: 46.7655, lng: 4.4995, importance: 0.84 },
-  { id: "fr-lyon-part-dieu", name: "Lyon Part-Dieu", lat: 45.7606, lng: 4.8595, importance: 1.0 }
+  { id: "fr-lyon-part-dieu", name: "Lyon Part-Dieu", lat: 45.7606, lng: 4.8595, importance: 1.0 },
+  { id: "fr-belfort-tgv", name: "Belfort-Montbéliard TGV", lat: 47.5861, lng: 6.8971, importance: 0.86 },
+  { id: "fr-mulhouse", name: "Mulhouse-Ville", lat: 47.7418, lng: 7.3430, importance: 0.88 },
+  { id: "fr-strasbourg", name: "Strasbourg", lat: 48.5850, lng: 7.7346, importance: 0.98 },
+  { id: "ch-basel-sbb", name: "Bâle SBB", lat: 47.5476, lng: 7.5896, importance: 0.95 }
 ];
 
 const KNOWN_PLACES: Record<string, Place> = {
-  "courlaoux": { name: "Courlaoux", lat: 46.6681, lng: 5.4611 },
-  "lons-le-saunier": { name: "Lons-le-Saunier", lat: 46.6753, lng: 5.5554 },
-  "lons le saunier": { name: "Lons-le-Saunier", lat: 46.6753, lng: 5.5554 },
-  "paris": { name: "Paris", lat: 48.8566, lng: 2.3522 },
-  "lyon": { name: "Lyon", lat: 45.764, lng: 4.8357 },
-  "bordeaux": { name: "Bordeaux", lat: 44.8378, lng: -0.5792 },
-  "seignosse": { name: "Seignosse", lat: 43.689, lng: -1.3746 },
-  "villefranche-sur-saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197 },
-  "villefranche sur saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197 }
+  "courlaoux": { name: "Courlaoux", lat: 46.6681, lng: 5.4611, countryCode: "FR" },
+  "lons-le-saunier": { name: "Lons-le-Saunier", lat: 46.6753, lng: 5.5554, countryCode: "FR" },
+  "lons le saunier": { name: "Lons-le-Saunier", lat: 46.6753, lng: 5.5554, countryCode: "FR" },
+  "paris": { name: "Paris", lat: 48.8566, lng: 2.3522, countryCode: "FR" },
+  "lyon": { name: "Lyon", lat: 45.764, lng: 4.8357, countryCode: "FR" },
+  "bordeaux": { name: "Bordeaux", lat: 44.8378, lng: -0.5792, countryCode: "FR" },
+  "seignosse": { name: "Seignosse", lat: 43.689, lng: -1.3746, countryCode: "FR" },
+  "villefranche-sur-saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197, countryCode: "FR" },
+  "villefranche sur saone": { name: "Villefranche-sur-Saône", lat: 45.989, lng: 4.7197, countryCode: "FR" },
+  "dusseldorf": { name: "Düsseldorf", lat: 51.2277, lng: 6.7735, countryCode: "DE" },
+  "düsseldorf": { name: "Düsseldorf", lat: 51.2277, lng: 6.7735, countryCode: "DE" }
 };
 
 function normalize(value: string) {

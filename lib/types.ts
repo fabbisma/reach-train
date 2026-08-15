@@ -8,6 +8,7 @@ export type LatLng = {
 
 export type Place = LatLng & {
   name: string;
+  countryCode?: string;
 };
 
 export type Station = LatLng & {

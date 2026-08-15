@@ -32,7 +32,7 @@ const labelText = {
 export default function SearchForm() {
   const [form, setForm] = useState<SearchRequest>({
     origin: "Courlaoux",
-    destination: "Paris",
+    destination: "Düsseldorf",
     date: tomorrowLocal(),
     time: "10:30",
     mode: "arriveBy",
@@ -81,7 +81,7 @@ export default function SearchForm() {
           </label>
           <label>
             <span>Destination</span>
-            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Paris" required />
+            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Düsseldorf" required />
           </label>
           <label>
             <span>Date</span>
@@ -98,6 +98,7 @@ export default function SearchForm() {
               <option value={60}>1 h</option>
               <option value={90}>1 h 30</option>
               <option value={120}>2 h</option>
+              <option value={180}>3 h</option>
             </select>
           </label>
           <label>

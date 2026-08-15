@@ -1,6 +1,7 @@
 import { MockRailProvider, MockRoadProvider } from "@/lib/providers/mock";
 import { GoogleRoutesProvider } from "@/lib/providers/google-routes";
 import { NavitiaRailProvider } from "@/lib/providers/navitia";
+import { TransitousRailProvider } from "@/lib/providers/transitous";
 import type { RailProvider, RoadProvider } from "@/lib/providers/types";
 import { resolveKnownPlace, STATIONS } from "@/lib/stations";
 import type { JourneyOption, SearchRequest, SearchResponse, Station } from "@/lib/types";
@@ -9,14 +10,33 @@ import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/
 const STATION_BUFFER_MINUTES = 22;
 const COMFORT_EXTRA_MINUTES = 10;
 
-function providers(): { road: RoadProvider; rail: RailProvider; live: boolean } {
+function providers(destinationCountry?: string): { road: RoadProvider; rail: RailProvider; live: boolean; railName: string } {
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
   const navitiaToken = process.env.NAVITIA_TOKEN;
-  return {
-    road: googleKey ? new GoogleRoutesProvider(googleKey) : new MockRoadProvider(),
-    rail: navitiaToken ? new NavitiaRailProvider(navitiaToken) : new MockRailProvider(),
-    live: Boolean(googleKey && navitiaToken)
-  };
+  const transitousContact = process.env.TRANSITOUS_CONTACT;
+  const international = Boolean(destinationCountry && destinationCountry !== "FR");
+
+  const road = googleKey ? new GoogleRoutesProvider(googleKey) : new MockRoadProvider();
+
+  if (international && transitousContact) {
+    return {
+      road,
+      rail: new TransitousRailProvider(transitousContact),
+      live: Boolean(googleKey),
+      railName: "Transitous/MOTIS"
+    };
+  }
+
+  if (!international && navitiaToken) {
+    return {
+      road,
+      rail: new NavitiaRailProvider(navitiaToken),
+      live: Boolean(googleKey),
+      railName: "Navitia"
+    };
+  }
+
+  return { road, rail: new MockRailProvider(), live: false, railName: "simulation" };
 }
 
 function candidateStations(origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, maxDriveMinutes: number) {
@@ -169,7 +189,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     throw new Error("DEMO_PLACE_NOT_FOUND");
   }
 
-  const { road, rail, live } = providers();
+  const { road, rail, live, railName } = providers(destination.countryCode);
   const directRoad = await road.route(origin, destination);
   const stations = candidateStations(origin, destination, request.maxDriveMinutes);
   const options = (await Promise.all(stations.map((station) => buildOption({ station, request, origin, destination, road, rail, directRoadKm: directRoad.distanceKm })))).filter((x): x is JourneyOption => Boolean(x));
@@ -181,7 +201,17 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     destination,
     options: labelAndSort(pareto(options)),
     notes: live
-      ? ["Google Routes et Navitia sont actifs.", "Les coûts et le CO₂ restent des estimations V0.1."]
-      : ["Mode démo : horaires et temps routiers simulés.", "Ajoutez NAVITIA_TOKEN et GOOGLE_MAPS_API_KEY pour activer les providers réels.", "En mode démo, les lieux reconnus incluent notamment Courlaoux, Paris, Lyon, Bordeaux et Seignosse."]
+      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.1."]
+      : destination.countryCode && destination.countryCode !== "FR"
+        ? [
+            "Mode démo international : horaires ferroviaires simulés tant que TRANSITOUS_CONTACT n'est pas renseigné.",
+            "Pour un trajet France → Allemagne, Transitous/MOTIS sera utilisé pour le rail transfrontalier.",
+            "Ajoutez TRANSITOUS_CONTACT (URL de votre site ou e-mail) et GOOGLE_MAPS_API_KEY dans Vercel pour passer aux données réelles."
+          ]
+        : [
+            "Mode démo : horaires et temps routiers simulés.",
+            "Ajoutez NAVITIA_TOKEN et GOOGLE_MAPS_API_KEY pour activer les providers réels en France.",
+            "Le mode démo reconnaît notamment Courlaoux, Paris, Lyon, Bordeaux, Seignosse et Düsseldorf."
+          ]
   };
 }

@@ -1,9 +1,11 @@
 import type { RailProvider } from "@/lib/providers/types";
-import type { Place, RailLeg, RailTransfer, Station } from "@/lib/types";
+import type { Place, RailLeg, RailSegment, RailTransfer, Station } from "@/lib/types";
 import { haversineKm } from "@/lib/utils";
 
 type TransitousPlace = {
   name?: string;
+  lat?: number;
+  lon?: number;
 };
 
 type TransitousLeg = {
@@ -54,6 +56,27 @@ function stationName(previous: TransitousLeg, next: TransitousLeg) {
   return arrival || departure || "Correspondance";
 }
 
+function railSegments(railLegs: TransitousLeg[]): RailSegment[] {
+  return railLegs.flatMap((leg) => {
+    if (!leg.startTime || !leg.endTime) return [];
+    const departureAt = new Date(leg.startTime).toISOString();
+    const arrivalAt = new Date(leg.endTime).toISOString();
+    return [{
+      fromStation: leg.from?.name?.trim() || "Gare de départ",
+      toStation: leg.to?.name?.trim() || "Gare d’arrivée",
+      departureAt,
+      arrivalAt,
+      durationMinutes: Math.max(1, Math.round((new Date(arrivalAt).getTime() - new Date(departureAt).getTime()) / 60_000)),
+      service: serviceName(leg),
+      fromLat: leg.from?.lat,
+      fromLng: leg.from?.lon,
+      toLat: leg.to?.lat,
+      toLng: leg.to?.lon,
+      realtime: leg.realTime === true
+    } satisfies RailSegment];
+  });
+}
+
 function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
   const details: RailTransfer[] = [];
   for (let index = 0; index < railLegs.length - 1; index += 1) {
@@ -76,17 +99,6 @@ function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
     });
   }
   return details;
-}
-
-function localDateKey(iso: string) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Paris",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date(iso));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export class TransitousRailProvider implements RailProvider {
@@ -116,7 +128,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.4 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.2.7 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -138,7 +150,6 @@ export class TransitousRailProvider implements RailProvider {
     });
   }
 
-
   async journeys(params: {
     station: Station;
     destination: Place;
@@ -150,9 +161,9 @@ export class TransitousRailProvider implements RailProvider {
 
     return itineraries
       .map((itinerary) => {
-        const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
+        const trainLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
         const services = [...new Set(
-          railLegs
+          trainLegs
             .map((leg) => serviceName(leg))
             .filter((value): value is string => Boolean(value))
         )].slice(0, 5);
@@ -164,8 +175,9 @@ export class TransitousRailProvider implements RailProvider {
           arrivalAt: new Date(itinerary.endTime).toISOString(),
           changes: Math.max(0, itinerary.transfers),
           services,
-          realtime: railLegs.some((leg) => leg.realTime === true),
-          transfers: transferDetails(railLegs)
+          realtime: trainLegs.some((leg) => leg.realTime === true),
+          transfers: transferDetails(trainLegs),
+          segments: railSegments(trainLegs)
         } satisfies RailLeg;
       })
       .sort((a, b) =>

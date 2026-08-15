@@ -12,6 +12,37 @@ export class MockRoadProvider implements RoadProvider {
   }
 }
 
+function mockLeg(params: {
+  station: Station;
+  destination: Place;
+  railDistanceKm: number;
+  durationMinutes: number;
+  departureAt: string;
+  arrivalAt: string;
+  changes: number;
+}): RailLeg {
+  return {
+    distanceKm: Math.round(params.railDistanceKm * 10) / 10,
+    durationMinutes: params.durationMinutes,
+    departureAt: params.departureAt,
+    arrivalAt: params.arrivalAt,
+    changes: params.changes,
+    services: ["Train simulé"],
+    segments: [{
+      fromStation: params.station.name,
+      toStation: params.destination.name,
+      departureAt: params.departureAt,
+      arrivalAt: params.arrivalAt,
+      durationMinutes: params.durationMinutes,
+      service: "Train simulé",
+      fromLat: params.station.lat,
+      fromLng: params.station.lng,
+      toLat: params.destination.lat,
+      toLng: params.destination.lng
+    }]
+  };
+}
+
 export class MockRailProvider implements RailProvider {
   async journeys(params: {
     station: Station;
@@ -32,13 +63,8 @@ export class MockRailProvider implements RailProvider {
     if (params.mode === "departAt") {
       const frequency = params.station.importance > 0.8 ? 15 : params.station.importance > 0.6 ? 30 : 45;
       const departureAt = roundUpToMinutes(params.searchAt, frequency);
-      return [{
-        distanceKm: Math.round(railDistanceKm * 10) / 10,
-        durationMinutes,
-        departureAt,
-        arrivalAt: addMinutes(departureAt, durationMinutes),
-        changes
-      }];
+      const arrivalAt = addMinutes(departureAt, durationMinutes);
+      return [mockLeg({ station: params.station, destination: params.destination, railDistanceKm, durationMinutes, departureAt, arrivalAt, changes })];
     }
 
     const target = new Date(params.searchAt);
@@ -49,20 +75,8 @@ export class MockRailProvider implements RailProvider {
     const previousArrival = addMinutes(arrivalAt, -24 * 60);
 
     return [
-      {
-        distanceKm: Math.round(railDistanceKm * 10) / 10,
-        durationMinutes,
-        departureAt: dayDeparture,
-        arrivalAt,
-        changes
-      },
-      {
-        distanceKm: Math.round(railDistanceKm * 10) / 10,
-        durationMinutes,
-        departureAt: previousDeparture,
-        arrivalAt: previousArrival,
-        changes
-      }
+      mockLeg({ station: params.station, destination: params.destination, railDistanceKm, durationMinutes, departureAt: dayDeparture, arrivalAt, changes }),
+      mockLeg({ station: params.station, destination: params.destination, railDistanceKm, durationMinutes, departureAt: previousDeparture, arrivalAt: previousArrival, changes })
     ];
   }
 }

@@ -1,5 +1,5 @@
 import type { RailProvider } from "@/lib/providers/types";
-import type { Place, RailLeg, RailTransfer, Station } from "@/lib/types";
+import type { Place, RailLeg, RailSegment, RailTransfer, Station } from "@/lib/types";
 import { haversineKm, isoToNavitiaLocal, zonedLocalToIso } from "@/lib/utils";
 
 function navitiaDate(iso: string) {
@@ -17,8 +17,16 @@ type NavitiaSection = {
   type?: string;
   departure_date_time?: string;
   arrival_date_time?: string;
-  from?: { name?: string };
-  to?: { name?: string };
+  from?: {
+    name?: string;
+    coord?: { lat?: string; lon?: string };
+    stop_point?: { coord?: { lat?: string; lon?: string } };
+  };
+  to?: {
+    name?: string;
+    coord?: { lat?: string; lon?: string };
+    stop_point?: { coord?: { lat?: string; lon?: string } };
+  };
   display_informations?: {
     name?: string;
     label?: string;
@@ -30,6 +38,41 @@ type NavitiaSection = {
 function navitiaService(section?: NavitiaSection) {
   const info = section?.display_informations;
   return info?.trip_short_name || info?.label || info?.name || info?.headsign || undefined;
+}
+
+
+function navitiaCoord(place?: NavitiaSection["from"]) {
+  const coord = place?.coord ?? place?.stop_point?.coord;
+  if (!coord) return {};
+  const lat = coord.lat != null ? Number(coord.lat) : undefined;
+  const lng = coord.lon != null ? Number(coord.lon) : undefined;
+  return {
+    lat: Number.isFinite(lat) ? lat : undefined,
+    lng: Number.isFinite(lng) ? lng : undefined
+  };
+}
+
+function navitiaSegments(sections: NavitiaSection[] = []): RailSegment[] {
+  return sections
+    .filter((section) => section.type === "public_transport" && section.departure_date_time && section.arrival_date_time)
+    .map((section) => {
+      const departureAt = parseNavitiaDate(section.departure_date_time!);
+      const arrivalAt = parseNavitiaDate(section.arrival_date_time!);
+      const from = navitiaCoord(section.from);
+      const to = navitiaCoord(section.to);
+      return {
+        fromStation: section.from?.name?.trim() || "Gare de départ",
+        toStation: section.to?.name?.trim() || "Gare d’arrivée",
+        departureAt,
+        arrivalAt,
+        durationMinutes: Math.max(1, Math.round((new Date(arrivalAt).getTime() - new Date(departureAt).getTime()) / 60_000)),
+        service: navitiaService(section),
+        fromLat: from.lat,
+        fromLng: from.lng,
+        toLat: to.lat,
+        toLng: to.lng
+      };
+    });
 }
 
 function navitiaTransfers(sections: NavitiaSection[] = []): RailTransfer[] {
@@ -122,7 +165,8 @@ export class NavitiaRailProvider implements RailProvider {
           arrivalAt: parseNavitiaDate(journey.arrival_date_time),
           changes: journey.nb_transfers ?? 0,
           services,
-          transfers: navitiaTransfers(journey.sections)
+          transfers: navitiaTransfers(journey.sections),
+          segments: navitiaSegments(journey.sections)
         } satisfies RailLeg;
       })
       .sort((a, b) =>

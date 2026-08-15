@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
+import type { JourneyOption, Place, RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
 
 function tomorrowLocal() {
   const d = new Date();
@@ -11,7 +11,6 @@ function tomorrowLocal() {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
 
 function fmtDateTime(iso: string) {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -25,9 +24,15 @@ function fmtDateTime(iso: string) {
 }
 
 function fmtDuration(minutes: number) {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const safe = Math.max(0, Math.round(minutes));
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
   return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`;
+}
+
+function fmtDelta(minutes: number) {
+  if (Math.abs(minutes) < 1) return "identique";
+  return `${minutes > 0 ? "+" : "−"}${fmtDuration(Math.abs(minutes))}`;
 }
 
 const labelText = {
@@ -40,6 +45,141 @@ const labelText = {
 function recommendationLabel(label: RecommendationBadge) {
   const medal = label.rank === 1 ? "🥇" : label.rank === 2 ? "🥈" : "🥉";
   return `${medal} ${labelText[label.criterion]}`;
+}
+
+type GeoPoint = { lat: number; lng: number; name: string };
+
+function railGeoPoints(option: JourneyOption, destination: Place): GeoPoint[] {
+  const raw: GeoPoint[] = [];
+  for (const segment of option.rail.segments ?? []) {
+    if (segment.fromLat != null && segment.fromLng != null) {
+      raw.push({ lat: segment.fromLat, lng: segment.fromLng, name: segment.fromStation });
+    }
+    if (segment.toLat != null && segment.toLng != null) {
+      raw.push({ lat: segment.toLat, lng: segment.toLng, name: segment.toStation });
+    }
+  }
+
+  if (raw.length < 2) {
+    return [
+      { lat: option.station.lat, lng: option.station.lng, name: option.station.name },
+      { lat: destination.lat, lng: destination.lng, name: destination.name }
+    ];
+  }
+
+  return raw.filter((point, index) => {
+    if (index === 0) return true;
+    const previous = raw[index - 1];
+    return Math.abs(point.lat - previous.lat) > 0.0001 || Math.abs(point.lng - previous.lng) > 0.0001 || point.name !== previous.name;
+  });
+}
+
+function MiniRailMap({ option, destination }: { option: JourneyOption; destination: Place }) {
+  const points = railGeoPoints(option, destination);
+  const width = 340;
+  const height = 150;
+  const padding = 18;
+  const meanLat = points.reduce((sum, point) => sum + point.lat, 0) / points.length;
+  const lonFactor = Math.max(0.35, Math.cos((meanLat * Math.PI) / 180));
+  const projected = points.map((point) => ({ ...point, px: point.lng * lonFactor, py: point.lat }));
+  const minX = Math.min(...projected.map((point) => point.px));
+  const maxX = Math.max(...projected.map((point) => point.px));
+  const minY = Math.min(...projected.map((point) => point.py));
+  const maxY = Math.max(...projected.map((point) => point.py));
+  const rangeX = Math.max(0.01, maxX - minX);
+  const rangeY = Math.max(0.01, maxY - minY);
+  const scale = Math.min((width - 2 * padding) / rangeX, (height - 2 * padding) / rangeY);
+  const usedWidth = rangeX * scale;
+  const usedHeight = rangeY * scale;
+  const offsetX = (width - usedWidth) / 2;
+  const offsetY = (height - usedHeight) / 2;
+  const plotted = projected.map((point) => ({
+    ...point,
+    x: offsetX + (point.px - minX) * scale,
+    y: height - (offsetY + (point.py - minY) * scale)
+  }));
+  const path = plotted.map((point) => `${point.x},${point.y}`).join(" ");
+  const routeNames = points.map((point) => point.name).filter((name, index, all) => index === 0 || name !== all[index - 1]);
+
+  return (
+    <div className="mini-rail-map" aria-label={`Schéma géographique du train : ${routeNames.join(" vers ")}`}>
+      <div className="mini-map-title">🗺️ Parcours ferroviaire · schéma géographique</div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img">
+        <polyline points={path} fill="none" className="mini-map-line" />
+        {plotted.map((point, index) => (
+          <g key={`${point.name}-${index}`}>
+            <circle cx={point.x} cy={point.y} r={index === 0 || index === plotted.length - 1 ? 6 : 5} className="mini-map-point" />
+            {index > 0 && index < plotted.length - 1 && (
+              <text x={point.x} y={point.y + 3} textAnchor="middle" className="mini-map-index">{index}</text>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div className="mini-map-caption">
+        <strong>{routeNames[0]}</strong>
+        {routeNames.slice(1, -1).map((name, index) => <span key={`${name}-${index}`}>→ {index + 1}. {name}</span>)}
+        {routeNames.length > 1 && <strong>→ {routeNames[routeNames.length - 1]}</strong>}
+      </div>
+    </div>
+  );
+}
+
+function RailDetails({ option, destination }: { option: JourneyOption; destination: Place }) {
+  const segments = option.rail.segments ?? [];
+  const firstStation = segments[0]?.fromStation ?? option.station.name;
+  const lastStation = segments[segments.length - 1]?.toStation ?? destination.name;
+
+  return (
+    <div className="rail-details">
+      <div className="rail-overview">
+        <span>🚆</span>
+        <div>
+          <strong>{firstStation} → {lastStation}</strong>
+          <small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
+        </div>
+      </div>
+
+      <MiniRailMap option={option} destination={destination} />
+
+      {segments.length > 0 ? (
+        <div className="rail-segments">
+          {segments.map((segment, index) => {
+            const transfer = option.rail.transfers?.[index];
+            return (
+              <div className="rail-segment-block" key={`${segment.fromStation}-${segment.toStation}-${segment.departureAt}-${index}`}>
+                <div className="rail-segment">
+                  <div className="segment-kicker">Train {index + 1}{segment.service ? ` · ${segment.service}` : ""}</div>
+                  <strong className="segment-route">{segment.fromStation} → {segment.toStation}</strong>
+                  <div className="segment-times">
+                    <span>Départ <b>{fmtDateTime(segment.departureAt)}</b></span>
+                    <span>Arrivée <b>{fmtDateTime(segment.arrivalAt)}</b></span>
+                    <span>{fmtDuration(segment.durationMinutes)}</span>
+                  </div>
+                </div>
+                {transfer && (
+                  <div className="transfer-card">
+                    <strong>🔁 Correspondance : {transfer.stationName}</strong>
+                    <span>Arrivée {fmtDateTime(transfer.arrivalAt)}</span>
+                    <span>Départ suivant {fmtDateTime(transfer.departureAt)}</span>
+                    <b>Transit : {fmtDuration(transfer.durationMinutes)}</b>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rail-segment fallback-segment">
+          <strong className="segment-route">{option.station.name} → {destination.name}</strong>
+          <div className="segment-times">
+            <span>Départ <b>{fmtDateTime(option.trainDepartureAt)}</b></span>
+            <span>Arrivée <b>{fmtDateTime(option.destinationArrivalAt)}</b></span>
+          </div>
+          {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SearchForm() {
@@ -130,7 +270,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.6 : les 3 meilleurs candidats de chacun des 4 critères sont proposés pour le jour J et la veille. Les doublons sont regroupés sur une seule carte.</p>
+        <p className="form-hint">V0.2.7.3 : segments ferroviaires détaillés, comparaison 100 % voiture et mini-carte géographique légère.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -146,9 +286,15 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
+            <span>🧩 V0.2.7.3</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
+          </div>
+
+          <div className="direct-car-reference">
+            <span>🚗 Référence 100 % voiture</span>
+            <strong>{fmtDuration(result.directCar.durationMinutes)} · {result.directCar.distanceKm} km</strong>
           </div>
 
           {result.adjustment.kind !== "none" && (
@@ -177,49 +323,53 @@ export default function SearchForm() {
                       <div className="empty">Aucune solution trouvée pour ce jour de départ.</div>
                     ) : (
                       <div className="option-grid">
-                        {groupOptions.map((option) => (
-                <article className="option-card" key={option.id}>
-                  <div className="badges">
-                    {option.labels.map((label) => <span key={`${label.criterion}-${label.rank}`}>{recommendationLabel(label)}</span>)}
-                  </div>
-                  <h3>{option.station.name}</h3>
-                  {option.warnings.length > 0 && (
-                    <div className="tradeoffs" aria-label="Points d’attention">
-                      {option.warnings.map((warning) => <span key={warning}>⚠️ {warning}</span>)}
-                    </div>
-                  )}
-                  <p className="leave-time">Départ conseillé <strong>{fmtDateTime(option.recommendedDepartureAt)}</strong></p>
-                  {result.request.mode === "arriveBy" && <p className="comfort">Confortable : {fmtDateTime(option.comfortableDepartureAt)} · limite : {fmtDateTime(option.latestDepartureAt)}</p>}
+                        {groupOptions.map((option) => {
+                          const deltaVsCar = option.totalMinutes - result.directCar.durationMinutes;
+                          return (
+                            <article className="option-card" key={option.id}>
+                              <div className="badges">
+                                {option.labels.map((label) => <span key={`${label.criterion}-${label.rank}`}>{recommendationLabel(label)}</span>)}
+                              </div>
+                              <h3>{option.station.name}</h3>
+                              {option.warnings.length > 0 && (
+                                <div className="tradeoffs" aria-label="Points d’attention">
+                                  {option.warnings.map((warning) => <span key={warning}>⚠️ {warning}</span>)}
+                                </div>
+                              )}
+                              <p className="leave-time">Départ conseillé <strong>{fmtDateTime(option.recommendedDepartureAt)}</strong></p>
+                              {result.request.mode === "arriveBy" && <p className="comfort">Confortable : {fmtDateTime(option.comfortableDepartureAt)} · limite : {fmtDateTime(option.latestDepartureAt)}</p>}
 
-                  <div className="timeline">
-                    <div><span>🚗</span><p><b>{fmtDateTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
-                    <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
-                    <div><span>🚆</span><p><b>{fmtDateTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
-                      {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}</p></div>
-                    {option.rail.transfers?.map((transfer, index) => (
-                      <div className="transfer-step" key={`${transfer.stationName}-${transfer.arrivalAt}-${index}`}>
-                        <span>🔁</span>
-                        <p>
-                          <b>{transfer.stationName}</b><br/>
-                          <small>Arrivée {fmtDateTime(transfer.arrivalAt)} · départ suivant {fmtDateTime(transfer.departureAt)}</small>
-                          <strong className="transfer-duration">Transit : {fmtDuration(transfer.durationMinutes)}</strong>
-                          {(transfer.fromService || transfer.toService) && (
-                            <small className="services">{transfer.fromService ?? "Train précédent"} → {transfer.toService ?? "Train suivant"}</small>
-                          )}
-                        </p>
-                      </div>
-                    ))}
-                    <div><span>📍</span><p><b>{fmtDateTime(option.destinationArrivalAt)}</b> arrivée</p></div>
-                  </div>
+                              <div className="timeline road-timeline">
+                                <div><span>🚗</span><p><b>{fmtDateTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
+                                <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
+                              </div>
 
-                  <div className="metrics">
-                    <div><span>Total</span><strong>{fmtDuration(option.totalMinutes)}</strong></div>
-                    <div><span>CO₂</span><strong>{option.co2Kg} kg</strong></div>
-                    <div><span>Coût estimé</span><strong>~{option.estimatedCostEur.toFixed(1)} €</strong></div>
-                    <div><span>Voiture évitée</span><strong>{option.carKmAvoided} km</strong></div>
-                  </div>
-                </article>
-                        ))}
+                              <RailDetails option={option} destination={result.destination} />
+
+                              <div className="car-comparison">
+                                <div>
+                                  <span>Temps total de cette option</span>
+                                  <strong>{fmtDuration(option.totalMinutes)}</strong>
+                                </div>
+                                <div>
+                                  <span>100 % voiture</span>
+                                  <strong>{fmtDuration(result.directCar.durationMinutes)}</strong>
+                                </div>
+                                <div className={deltaVsCar > 0 ? "comparison-slower" : deltaVsCar < 0 ? "comparison-faster" : ""}>
+                                  <span>Écart</span>
+                                  <strong>{fmtDelta(deltaVsCar)} vs voiture</strong>
+                                </div>
+                              </div>
+
+                              <div className="metrics">
+                                <div><span>CO₂</span><strong>{option.co2Kg} kg</strong></div>
+                                <div><span>Coût estimé</span><strong>~{option.estimatedCostEur.toFixed(1)} €</strong></div>
+                                <div><span>Voiture utilisée</span><strong>{option.drive.distanceKm} km</strong></div>
+                                <div><span>Voiture évitée</span><strong>{option.carKmAvoided} km</strong></div>
+                              </div>
+                            </article>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -230,6 +380,7 @@ export default function SearchForm() {
 
           <div className="notes">
             <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; les 3 meilleurs candidats par critère sont affichés, avec déduplication des gares.</p>
+            <p>• La mini-carte est un schéma géographique des gares des segments ferroviaires : elle n’ajoute aucun appel cartographique supplémentaire.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

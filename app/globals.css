@@ -162,3 +162,162 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   color: var(--muted, #65717d);
   font-size: 0.86rem;
 }
+
+/* V0.2.7 — comparaison voiture, segments train et mini-carte */
+.direct-car-reference {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font-size: 13px;
+}
+.direct-car-reference span { color: var(--muted); font-weight: 700; }
+.direct-car-reference strong { color: var(--text); }
+
+.road-timeline { margin-bottom: 12px; }
+
+.rail-details {
+  margin: 14px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fbfdfb;
+}
+.rail-overview {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  background: #f2f7f3;
+  border-bottom: 1px solid var(--line);
+}
+.rail-overview > span { font-size: 20px; }
+.rail-overview strong { display: block; font-size: 14px; }
+.rail-overview small { display: block; margin-top: 3px; color: var(--muted); }
+
+.mini-rail-map {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+.mini-map-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.mini-rail-map svg {
+  display: block;
+  width: 100%;
+  height: 128px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbf9, #eef5f1);
+}
+.mini-map-line {
+  stroke: #4e8d69;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.mini-map-point {
+  fill: #fff;
+  stroke: #19724a;
+  stroke-width: 3;
+}
+.mini-map-index {
+  fill: #0f5637;
+  font-size: 8px;
+  font-weight: 800;
+  pointer-events: none;
+}
+.mini-map-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 7px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.mini-map-caption strong { color: var(--text); }
+
+.rail-segments {
+  padding: 12px 14px 14px;
+}
+.rail-segment-block + .rail-segment-block { margin-top: 12px; }
+.rail-segment {
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid #dfe9e2;
+  background: #fff;
+}
+.segment-kicker {
+  margin-bottom: 5px;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.segment-route {
+  display: block;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.segment-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.segment-times b { color: var(--text); }
+.transfer-card {
+  display: grid;
+  gap: 3px;
+  margin: 7px 8px 0;
+  padding: 9px 11px;
+  border-left: 3px solid #e0a54e;
+  background: #fff8ea;
+  border-radius: 0 10px 10px 0;
+  color: #76501e;
+  font-size: 11px;
+}
+.transfer-card strong { font-size: 12px; color: #5f421b; }
+.transfer-card b { margin-top: 2px; color: #2e637a; }
+.fallback-segment { margin: 12px 14px 14px; }
+
+.car-comparison {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 11px;
+  border: 1px solid #d6e2da;
+  border-radius: 14px;
+  background: #f5faf7;
+}
+.car-comparison div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.car-comparison span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.car-comparison strong { font-size: 13px; }
+.comparison-slower strong { color: #9a5b16; }
+.comparison-faster strong { color: var(--green); }
+
+@media (max-width: 560px) {
+  .direct-car-reference { align-items: flex-start; flex-direction: column; }
+  .car-comparison { grid-template-columns: 1fr; }
+  .mini-rail-map svg { height: 112px; }
+}

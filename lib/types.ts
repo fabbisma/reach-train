@@ -62,7 +62,7 @@ export type JourneyOption = {
   isStrategicException: boolean;
   driveLimitExceededBy: number;
   score?: number;
-  labels: Array<"recommended" | "greenest" | "fastest" | "cheapest">;
+  labels: Array<"closestDrive" | "mostDirectRail" | "mostCarSaved">;
 };
 
 export type ProviderStatus = {

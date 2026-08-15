@@ -139,71 +139,43 @@ function pareto(options: JourneyOption[]) {
   }));
 }
 
-function normalize(values: number[], value: number) {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  return max === min ? 0 : (value - min) / (max - min);
-}
-
-function labelAndSort(options: JourneyOption[], paretoOptions: JourneyOption[]) {
+function summarizeOptions(options: JourneyOption[]) {
   if (!options.length) return options;
-  const time = options.map((x) => x.totalMinutes);
-  const co2 = options.map((x) => x.co2Kg);
-  const cost = options.map((x) => x.estimatedCostEur);
 
-  for (const option of options) {
-    option.labels = [];
-    option.score = normalize(time, option.totalMinutes) * 0.48 + normalize(co2, option.co2Kg) * 0.34 + normalize(cost, option.estimatedCostEur) * 0.18;
-  }
+  for (const option of options) option.labels = [];
 
-  const fastest = [...options].sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
-  const greenest = [...options].sort((a, b) => a.co2Kg - b.co2Kg)[0];
-  const cheapest = [...options].sort((a, b) => a.estimatedCostEur - b.estimatedCostEur)[0];
-  const recommendedPool = paretoOptions.length ? paretoOptions : options;
-  const recommended = [...recommendedPool].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+  const closestDrive = [...options].sort((a, b) =>
+    a.drive.durationMinutes - b.drive.durationMinutes ||
+    a.drive.distanceKm - b.drive.distanceKm ||
+    a.totalMinutes - b.totalMinutes
+  )[0];
 
-  for (const option of options) {
-    if (option.id === recommended.id) option.labels.push("recommended");
-    if (option.id === fastest.id) option.labels.push("fastest");
-    if (option.id === greenest.id) option.labels.push("greenest");
-    if (option.id === cheapest.id) option.labels.push("cheapest");
-  }
+  const mostDirectRail = [...options].sort((a, b) =>
+    a.rail.changes - b.rail.changes ||
+    a.rail.durationMinutes - b.rail.durationMinutes ||
+    a.totalMinutes - b.totalMinutes
+  )[0];
 
-  // On conserve d'abord toute la frontière Pareto. Pendant le MVP, si elle
-  // contient trop peu de gares, on complète avec des alternatives réellement
-  // différentes : gare la plus proche, moins de correspondances et meilleur
-  // score global. Cela rend le moteur testable sans masquer les possibilités.
+  const mostCarSaved = [...options].sort((a, b) =>
+    b.carKmAvoided - a.carKmAvoided ||
+    a.drive.distanceKm - b.drive.distanceKm ||
+    a.totalMinutes - b.totalMinutes
+  )[0];
+
+  closestDrive.labels.push("closestDrive");
+  if (!mostDirectRail.labels.includes("mostDirectRail")) mostDirectRail.labels.push("mostDirectRail");
+  if (!mostCarSaved.labels.includes("mostCarSaved")) mostCarSaved.labels.push("mostCarSaved");
+
+  // Une même gare peut gagner plusieurs catégories. On ne duplique pas la carte :
+  // ses badges indiquent simplement les critères pour lesquels elle est la meilleure.
   const selected = new Map<string, JourneyOption>();
-  for (const option of [...paretoOptions].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))) {
-    selected.set(option.id, option);
-  }
+  for (const option of [closestDrive, mostDirectRail, mostCarSaved]) selected.set(option.id, option);
 
-  const closest = [...options].sort((a, b) => a.drive.durationMinutes - b.drive.durationMinutes)[0];
-  const fewestChanges = [...options].sort((a, b) => a.rail.changes - b.rail.changes || a.totalMinutes - b.totalMinutes)[0];
-  for (const option of [recommended, fastest, greenest, cheapest, closest, fewestChanges]) {
-    if (option) selected.set(option.id, option);
-  }
-
-  // Toujours montrer jusqu'à trois hubs stratégiques hors préférence de conduite,
-  // afin que l'utilisateur voie qu'une gare plus lointaine a bien été testée.
-  const strategicExceptions = options
-    .filter((x) => x.isStrategicException)
-    .sort((a, b) => a.rail.changes - b.rail.changes || a.totalMinutes - b.totalMinutes || b.station.importance - a.station.importance)
-    .slice(0, 3);
-  for (const option of strategicExceptions) selected.set(option.id, option);
-
-  for (const option of [...options].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))) {
-    if (selected.size >= 8) break;
-    selected.set(option.id, option);
-  }
-
-  return [...selected.values()]
-    .sort((a, b) => {
-      const ar = a.id === recommended.id ? -1 : 0;
-      const br = b.id === recommended.id ? -1 : 0;
-      return ar - br || (a.score ?? 0) - (b.score ?? 0);
-    })
-    .slice(0, 8);
+  return [...selected.values()].sort((a, b) => {
+    const order = (x: JourneyOption) =>
+      x.labels.includes("closestDrive") ? 0 : x.labels.includes("mostDirectRail") ? 1 : 2;
+    return order(a) - order(b);
+  });
 }
 
 async function buildOption(params: {
@@ -335,6 +307,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
   }
   notes.push(request.maxTransfers === 0 ? "Filtre actif : trajet ferroviaire direct uniquement." : `Filtre actif : ${request.maxTransfers} correspondance${request.maxTransfers > 1 ? "s" : ""} maximum.`);
+  notes.push("Synthèse affichée : gare la plus proche en voiture, trajet ferroviaire le plus direct et option qui économise le plus de kilomètres de voiture.");
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
 
   return {
@@ -342,7 +315,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     request,
     origin,
     destination,
-    options: labelAndSort(options, paretoOptions),
+    options: summarizeOptions(options),
     viableStationCount: options.length,
     paretoStationCount: paretoOptions.length,
     providers: {

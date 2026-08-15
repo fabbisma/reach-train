@@ -23,10 +23,9 @@ function fmtDuration(minutes: number) {
 }
 
 const labelText = {
-  recommended: "⚖️ Recommandé",
-  greenest: "🌱 CO₂ mini",
-  fastest: "⚡ Plus rapide",
-  cheapest: "💰 Moins cher"
+  closestDrive: "🚗 Gare la plus proche",
+  mostDirectRail: "🚆 Train le plus direct",
+  mostCarSaved: "🌿 Plus de voiture économisée"
 } as const;
 
 export default function SearchForm() {
@@ -127,7 +126,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.6 : correspondances = maximum autorisé, trajets directs inclus · l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
+        <p className="form-hint">V0.1.7 : l’app analyse toutes les gares candidates mais synthétise seulement les meilleures selon 3 critères : proximité en voiture, train le plus direct et kilomètres de voiture économisés.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -139,7 +138,7 @@ export default function SearchForm() {
               <p className="eyebrow">{modeLabel}</p>
               <h2>{result.origin.name} → {result.destination.name}</h2>
             </div>
-            <span className="result-count">{result.options.length} affichées · {result.viableStationCount} gares viables</span>
+            <span className="result-count">{result.options.length} synthèse{result.options.length > 1 ? "s" : ""} · {result.viableStationCount} gares analysées</span>
           </div>
 
           <div className="provider-status">
@@ -153,7 +152,7 @@ export default function SearchForm() {
           ) : (
             <div className="option-grid">
               {result.options.map((option) => (
-                <article className={`option-card ${option.labels.includes("recommended") ? "recommended" : ""}`} key={option.id}>
+                <article className="option-card" key={option.id}>
                   <div className="badges">
                     {option.labels.map((label) => <span key={label}>{labelText[label]}</span>)}
                   </div>
@@ -184,7 +183,7 @@ export default function SearchForm() {
           )}
 
           <div className="notes">
-            <p>• {result.paretoStationCount} gare{result.paretoStationCount > 1 ? "s" : ""} sur la frontière Pareto ; les autres cartes affichées servent d'alternatives utiles pour le test.</p>
+            <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; seules les meilleures synthèses sont affichées.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

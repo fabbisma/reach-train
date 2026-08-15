@@ -105,3 +105,14 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - `1` = jusqu'à 1 correspondance, donc les trains directs sont aussi éligibles.
 - Lorsqu'une gare offre à la fois un direct et un trajet avec correspondance, le moteur privilégie le direct ; à nombre de correspondances égal, il garde le meilleur horaire.
 - Même comportement pour Transitous/MOTIS et Navitia.
+
+
+## V0.1.7 — synthèse des meilleures options
+
+L’écran principal n’affiche plus toutes les gares viables. Le moteur analyse toujours les candidates en arrière-plan puis ne conserve que :
+
+1. **Gare la plus proche en voiture** — durée de conduite minimale.
+2. **Train le plus direct** — nombre de correspondances minimal, puis durée ferroviaire minimale.
+3. **Plus de voiture économisée** — maximum de kilomètres de conduite évités par rapport au trajet 100 % voiture.
+
+Si une même gare gagne plusieurs catégories, elle n’est affichée qu’une fois avec plusieurs badges.

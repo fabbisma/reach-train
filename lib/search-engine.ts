@@ -224,7 +224,7 @@ async function buildOption(params: {
   if (params.strategicException && driveLimitExceededBy > 120) return null;
 
   if (params.request.mode === "arriveBy") {
-    const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: targetIso, mode: "arriveBy" });
+    const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: targetIso, mode: "arriveBy", maxTransfers: params.request.maxTransfers });
     if (!rail) return null;
 
     const latestStationArrivalAt = addMinutes(rail.departureAt, -STATION_BUFFER_MINUTES);
@@ -263,7 +263,7 @@ async function buildOption(params: {
   const carDepartureAt = targetIso;
   const road = await params.road.route(params.origin, params.station, carDepartureAt);
   const earliestTrainAt = addMinutes(addMinutes(carDepartureAt, road.durationMinutes), STATION_BUFFER_MINUTES);
-  const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: earliestTrainAt, mode: "departAt" });
+  const rail = await params.rail.journey({ station: params.station, destination: params.destination, searchAt: earliestTrainAt, mode: "departAt", maxTransfers: params.request.maxTransfers });
   if (!rail) return null;
   const stationArrivalAt = addMinutes(carDepartureAt, road.durationMinutes);
   const impact = estimateImpact({ carKm: road.distanceKm, railKm: rail.distanceKm, directCarKm: params.directRoadKm, vehicleType: params.request.vehicleType });
@@ -334,6 +334,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   if (failures.length) {
     notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
   }
+  notes.push(request.maxTransfers === 0 ? "Filtre actif : trajet ferroviaire direct uniquement." : `Filtre actif : ${request.maxTransfers} correspondance${request.maxTransfers > 1 ? "s" : ""} maximum.`);
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
 
   return {

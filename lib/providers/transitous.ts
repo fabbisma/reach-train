@@ -41,6 +41,7 @@ export class TransitousRailProvider implements RailProvider {
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
+    maxTransfers: number;
   }): Promise<RailLeg | null> {
     const query = new URLSearchParams({
       fromPlace: `${params.station.lat},${params.station.lng}`,
@@ -49,7 +50,7 @@ export class TransitousRailProvider implements RailProvider {
       arriveBy: params.mode === "arriveBy" ? "true" : "false",
       transitModes: "RAIL",
       directModes: "",
-      maxTransfers: "5",
+      maxTransfers: String(params.maxTransfers),
       timetableView: "false",
       radius: "350",
       detailedLegs: "false",
@@ -59,7 +60,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.1.4 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.1.5 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -80,9 +81,10 @@ export class TransitousRailProvider implements RailProvider {
       return new Date(itinerary.startTime).getTime() >= target;
     });
 
-    if (!valid.length) return null;
+    const withinTransferLimit = valid.filter((itinerary) => Math.max(0, itinerary.transfers) <= params.maxTransfers);
+    if (!withinTransferLimit.length) return null;
 
-    const itinerary = [...valid].sort((a, b) => {
+    const itinerary = [...withinTransferLimit].sort((a, b) => {
       if (params.mode === "arriveBy") {
         // Pour une heure d'arrivée imposée, on privilégie le départ le plus tardif.
         return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();

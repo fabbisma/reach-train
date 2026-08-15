@@ -37,6 +37,7 @@ export default function SearchForm() {
     time: "10:30",
     mode: "arriveBy",
     maxDriveMinutes: 90,
+    maxTransfers: 1,
     vehicleType: "electric"
   });
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -108,6 +109,15 @@ export default function SearchForm() {
             </select>
           </label>
           <label>
+            <span>Correspondances max</span>
+            <select value={form.maxTransfers} onChange={(e) => setForm({ ...form, maxTransfers: Number(e.target.value) })}>
+              <option value={0}>0 · Direct uniquement</option>
+              <option value={1}>1 correspondance</option>
+              <option value={2}>2 correspondances</option>
+              <option value={3}>3 correspondances</option>
+            </select>
+          </label>
+          <label>
             <span>Voiture</span>
             <select value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value as SearchRequest["vehicleType"] })}>
               <option value="electric">Électrique</option>
@@ -117,7 +127,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.4 : l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
+        <p className="form-hint">V0.1.5 : filtre de correspondances actif · l'app teste aussi quelques grands hubs au-delà de votre préférence de conduite lorsqu'ils peuvent améliorer fortement le trajet.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -135,6 +145,7 @@ export default function SearchForm() {
           <div className="provider-status">
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
+            <span>🔀 {result.request.maxTransfers === 0 ? "Direct uniquement" : `${result.request.maxTransfers} correspondance${result.request.maxTransfers > 1 ? "s" : ""} max`}</span>
           </div>
 
           {result.options.length === 0 ? (

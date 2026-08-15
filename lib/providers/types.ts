@@ -10,5 +10,6 @@ export interface RailProvider {
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
+    maxTransfers: number;
   }): Promise<RailLeg | null>;
 }

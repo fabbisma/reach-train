@@ -18,6 +18,7 @@ export class MockRailProvider implements RailProvider {
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
+    maxTransfers: number;
   }): Promise<RailLeg | null> {
     const crowKm = haversineKm(params.station, params.destination);
     if (crowKm < 35) return null;
@@ -26,6 +27,7 @@ export class MockRailProvider implements RailProvider {
     const effectiveSpeed = 85 + params.station.importance * 95;
     const durationMinutes = Math.round((railDistanceKm / effectiveSpeed) * 60 + (1 - params.station.importance) * 28 + 12);
     const changes = params.station.importance > 0.78 ? 0 : params.station.importance > 0.55 ? 1 : 2;
+    if (changes > params.maxTransfers) return null;
 
     let departureAt: string;
     let arrivalAt: string;

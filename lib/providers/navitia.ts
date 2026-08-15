@@ -21,12 +21,14 @@ export class NavitiaRailProvider implements RailProvider {
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
+    maxTransfers: number;
   }): Promise<RailLeg | null> {
     const query = new URLSearchParams({
       from: `${params.station.lng};${params.station.lat}`,
       to: `${params.destination.lng};${params.destination.lat}`,
       datetime: navitiaDate(params.searchAt),
       datetime_represents: params.mode === "arriveBy" ? "arrival" : "departure",
+      max_nb_transfers: String(params.maxTransfers),
       count: "3"
     });
 
@@ -47,7 +49,7 @@ export class NavitiaRailProvider implements RailProvider {
       }>;
     };
 
-    const journey = json.journeys?.[0];
+    const journey = json.journeys?.find((item) => (item.nb_transfers ?? 0) <= params.maxTransfers);
     if (!journey) return null;
 
     const railMeters = (journey.distances?.train ?? 0) + (journey.distances?.rail_shuttle ?? 0);

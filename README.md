@@ -1,4 +1,4 @@
-# EcoRail Planner — V0.1
+# EcoRail Planner — V0.1.5
 
 MVP d'un planificateur multimodal qui choisit automatiquement une gare stratégique entre le départ et la destination, puis calcule l'heure conseillée de départ en voiture.
 
@@ -89,3 +89,11 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - `GOOGLE_MAPS_API_KEY` est facultative pour le premier test : sans elle, le rail est réel et la route voiture reste simulée (`mode hybride`).
 - Avec `GOOGLE_MAPS_API_KEY`, le test Courlaoux → Düsseldorf passe en données réelles pour le rail et la route.
 - Le nombre de requêtes Transitous est volontairement limité à 6 gares normales + 3 hubs stratégiques au maximum.
+
+
+## V0.1.5 — filtre de correspondances
+
+- Nouveau champ **Correspondances max**, réglé à **1** par défaut.
+- `0` = trajet ferroviaire direct uniquement.
+- Valeurs proposées : 0, 1, 2 ou 3 correspondances.
+- Le filtre est envoyé directement aux providers ferroviaires (Transitous/MOTIS et Navitia), puis vérifié une seconde fois dans le provider.

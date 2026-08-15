@@ -9,6 +9,9 @@ function validRequest(body: Partial<SearchRequest>): body is SearchRequest {
       body.time &&
       (body.mode === "arriveBy" || body.mode === "departAt") &&
       typeof body.maxDriveMinutes === "number" &&
+      Number.isInteger(body.maxTransfers) &&
+      (body.maxTransfers ?? -1) >= 0 &&
+      (body.maxTransfers ?? 99) <= 5 &&
       (body.vehicleType === "electric" || body.vehicleType === "thermal")
   );
 }

@@ -24,6 +24,7 @@ export type SearchRequest = {
   time: string;
   mode: SearchMode;
   maxDriveMinutes: number;
+  maxTransfers: number;
   vehicleType: VehicleType;
 };
 

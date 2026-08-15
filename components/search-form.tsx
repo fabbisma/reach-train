@@ -13,14 +13,14 @@ function tomorrowLocal() {
   return `${y}-${m}-${day}`;
 }
 
-function fmtDateTime(iso: string) {
+function fmtDateTime(iso: string, timeZone = "Europe/Paris") {
   return new Intl.DateTimeFormat("fr-FR", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/Paris"
+    timeZone
   }).format(new Date(iso));
 }
 
@@ -75,16 +75,16 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
                   <div className="segment-kicker">Train {index + 1}{segment.service ? ` · ${segment.service}` : ""}</div>
                   <strong className="segment-route">{segment.fromStation} → {segment.toStation}</strong>
                   <div className="segment-times">
-                    <span>Départ <b>{fmtDateTime(segment.departureAt)}</b></span>
-                    <span>Arrivée <b>{fmtDateTime(segment.arrivalAt)}</b></span>
+                    <span>Départ <b>{fmtDateTime(segment.departureAt, segment.fromTimeZone ?? option.station.timeZone ?? origin.timeZone)}</b></span>
+                    <span>Arrivée <b>{fmtDateTime(segment.arrivalAt, segment.toTimeZone ?? destination.timeZone)}</b></span>
                     <span>{fmtDuration(segment.durationMinutes)}</span>
                   </div>
                 </div>
                 {transfer && (
                   <div className="transfer-card">
                     <strong>🔁 Correspondance : {transfer.stationName}</strong>
-                    <span>Arrivée {fmtDateTime(transfer.arrivalAt)}</span>
-                    <span>Départ suivant {fmtDateTime(transfer.departureAt)}</span>
+                    <span>Arrivée {fmtDateTime(transfer.arrivalAt, transfer.timeZone ?? destination.timeZone)}</span>
+                    <span>Départ suivant {fmtDateTime(transfer.departureAt, transfer.timeZone ?? destination.timeZone)}</span>
                     <b>Transit : {fmtDuration(transfer.durationMinutes)}</b>
                   </div>
                 )}
@@ -96,8 +96,8 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
         <div className="rail-segment fallback-segment">
           <strong className="segment-route">{option.station.name} → {destination.name}</strong>
           <div className="segment-times">
-            <span>Départ <b>{fmtDateTime(option.trainDepartureAt)}</b></span>
-            <span>Arrivée <b>{fmtDateTime(option.destinationArrivalAt)}</b></span>
+            <span>Départ <b>{fmtDateTime(option.trainDepartureAt, option.station.timeZone ?? origin.timeZone)}</b></span>
+            <span>Arrivée <b>{fmtDateTime(option.destinationArrivalAt, destination.timeZone)}</b></span>
           </div>
           {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}
         </div>
@@ -160,11 +160,11 @@ export default function SearchForm() {
         <div className="form-grid">
           <label>
             <span>Départ</span>
-            <input value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value })} placeholder="Courlaoux" required />
+            <input value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value })} placeholder="Ville, adresse ou lieu de départ" required />
           </label>
           <label>
             <span>Destination</span>
-            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Düsseldorf" required />
+            <input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} placeholder="Ville, adresse ou lieu d’arrivée" required />
           </label>
           <label>
             <span>Date</span>
@@ -194,7 +194,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.8.1 : mini-carte OpenStreetMap avec liaison voiture + tracé ferroviaire, segments détaillés et comparaison 100 % voiture.</p>
+        <p className="form-hint">V0.3.0 Global Beta : lieux et gares découverts dynamiquement via Transitous/MOTIS. Couverture selon les données locales disponibles.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -206,11 +206,11 @@ export default function SearchForm() {
               <p className="eyebrow">{modeLabel}</p>
               <h2>{result.origin.name} → {result.destination.name}</h2>
             </div>
-            <span className="result-count">{result.options.length} synthèse{result.options.length > 1 ? "s" : ""} · {result.viableStationCount} gares analysées</span>
+            <span className="result-count">{result.options.length} synthèse{result.options.length > 1 ? "s" : ""} · {result.candidateStationCount} candidates · {result.viableStationCount} avec solution</span>
           </div>
 
           <div className="provider-status">
-            <span>🧩 V0.2.8.1</span>
+            <span>🌍 V0.3.0 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -260,12 +260,12 @@ export default function SearchForm() {
                                   {option.warnings.map((warning) => <span key={warning}>⚠️ {warning}</span>)}
                                 </div>
                               )}
-                              <p className="leave-time">Départ conseillé <strong>{fmtDateTime(option.recommendedDepartureAt)}</strong></p>
-                              {result.request.mode === "arriveBy" && <p className="comfort">Confortable : {fmtDateTime(option.comfortableDepartureAt)} · limite : {fmtDateTime(option.latestDepartureAt)}</p>}
+                              <p className="leave-time">Départ conseillé <strong>{fmtDateTime(option.recommendedDepartureAt, result.origin.timeZone)}</strong></p>
+                              {result.request.mode === "arriveBy" && <p className="comfort">Confortable : {fmtDateTime(option.comfortableDepartureAt, result.origin.timeZone)} · limite : {fmtDateTime(option.latestDepartureAt, result.origin.timeZone)}</p>}
 
                               <div className="timeline road-timeline">
-                                <div><span>🚗</span><p><b>{fmtDateTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
-                                <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
+                                <div><span>🚗</span><p><b>{fmtDateTime(option.recommendedDepartureAt, result.origin.timeZone)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
+                                <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt, option.station.timeZone ?? result.origin.timeZone)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
                               </div>
 
                               <RailDetails option={option} origin={result.origin} destination={result.destination} />
@@ -303,8 +303,9 @@ export default function SearchForm() {
           )}
 
           <div className="notes">
-            <p>• {result.viableStationCount} gare{result.viableStationCount > 1 ? "s" : ""} analysée{result.viableStationCount > 1 ? "s" : ""} ; les 3 meilleurs candidats par critère sont affichés, avec déduplication des gares.</p>
-            <p>• La mini-carte montre maintenant la liaison voiture jusqu’à la gare puis le train. Avec Google Routes, la route voiture réelle est tracée ; sinon une liaison directe est utilisée. Avec Transitous, le tracé ferroviaire détaillé MOTIS reste prioritaire.</p>
+            <p>• {result.candidateStationCount} gares candidates testées ; {result.viableStationCount} ont fourni au moins une solution. Les 3 meilleurs candidats par critère sont affichés avec déduplication.</p>
+            <p>• Les lieux et les gares sont désormais recherchés dynamiquement. La mini-carte conserve la liaison voiture puis le tracé ferroviaire détaillé lorsque MOTIS le fournit.</p>
+            <p>• Données transport : <a href="https://transitous.org/sources/" target="_blank" rel="noreferrer">sources Transitous/MOTIS</a>.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

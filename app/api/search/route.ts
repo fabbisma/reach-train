@@ -23,13 +23,25 @@ export async function POST(request: Request) {
     const result = await searchMultimodal(body);
     return Response.json(result);
   } catch (error) {
-    if (error instanceof Error && error.message === "DEMO_PLACE_NOT_FOUND") {
+    if (error instanceof Error && error.message === "PLACE_NOT_FOUND_ORIGIN") {
       return Response.json(
-        { error: "Ce lieu n'est pas encore reconnu dans ce prototype. Pour ce test, essaie Courlaoux → Düsseldorf." },
+        { error: "Lieu de départ introuvable. Essaie une ville, une adresse complète ou le nom d’un lieu." },
+        { status: 422 }
+      );
+    }
+    if (error instanceof Error && error.message === "PLACE_NOT_FOUND_DESTINATION") {
+      return Response.json(
+        { error: "Destination introuvable. Essaie une ville, une adresse complète ou le nom d’un lieu." },
+        { status: 422 }
+      );
+    }
+    if (error instanceof Error && error.message === "NO_RAIL_STATIONS_FOUND") {
+      return Response.json(
+        { error: "Aucune gare ferroviaire exploitable n’a été trouvée autour de ce trajet. La couverture locale Transitous/MOTIS est peut-être insuffisante." },
         { status: 422 }
       );
     }
     console.error(error);
-    return Response.json({ error: "Le calcul a échoué." }, { status: 500 });
+    return Response.json({ error: "Le calcul a échoué. Réessaie dans quelques instants." }, { status: 500 });
   }
 }

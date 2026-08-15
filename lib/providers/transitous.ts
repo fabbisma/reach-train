@@ -6,6 +6,7 @@ type TransitousPlace = {
   name?: string;
   lat?: number;
   lon?: number;
+  tz?: string;
 };
 
 type TransitousLeg = {
@@ -108,6 +109,8 @@ function railSegments(railLegs: TransitousLeg[]): RailSegment[] {
       toLat: leg.to?.lat,
       toLng: leg.to?.lon,
       realtime: leg.realTime === true,
+      fromTimeZone: leg.from?.tz,
+      toTimeZone: leg.to?.tz,
       geometry: leg.legGeometry?.points
         ? decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6)
         : undefined
@@ -133,7 +136,8 @@ function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
       departureAt: new Date(next.startTime).toISOString(),
       durationMinutes,
       fromService: serviceName(previous),
-      toService: serviceName(next)
+      toService: serviceName(next),
+      timeZone: previous.to?.tz || next.from?.tz
     });
   }
   return details;
@@ -158,7 +162,6 @@ export class TransitousRailProvider implements RailProvider {
       directModes: "",
       maxTransfers: String(params.maxTransfers),
       timetableView: "false",
-      radius: "350",
       detailedLegs: "true",
       joinInterlinedLegs: "true",
       language: "fr"
@@ -166,7 +169,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.8 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.3.0 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)

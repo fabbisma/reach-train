@@ -9,12 +9,14 @@ export type LatLng = {
 export type Place = LatLng & {
   name: string;
   countryCode?: string;
+  timeZone?: string;
 };
 
 export type Station = LatLng & {
   id: string;
   name: string;
   importance: number;
+  timeZone?: string;
 };
 
 export type SearchRequest = {
@@ -40,6 +42,7 @@ export type RailTransfer = {
   durationMinutes: number;
   fromService?: string;
   toService?: string;
+  timeZone?: string;
 };
 
 export type RailSegment = {
@@ -55,6 +58,8 @@ export type RailSegment = {
   toLng?: number;
   realtime?: boolean;
   geometry?: LatLng[];
+  fromTimeZone?: string;
+  toTimeZone?: string;
 };
 
 export type RailLeg = {
@@ -120,6 +125,7 @@ export type SearchResponse = {
   directCar: RoadLeg;
   options: JourneyOption[];
   viableStationCount: number;
+  candidateStationCount: number;
   paretoStationCount: number;
   usedMaxTransfers: number;
   providers: {

@@ -48,7 +48,6 @@ export default function SearchForm() {
     time: "10:30",
     mode: "arriveBy",
     maxDriveMinutes: 90,
-    maxTransfers: 1,
     vehicleType: "electric"
   });
   const [result, setResult] = useState<SearchResponse | null>(null);
@@ -120,15 +119,6 @@ export default function SearchForm() {
             </select>
           </label>
           <label>
-            <span>Correspondances max</span>
-            <select value={form.maxTransfers} onChange={(e) => setForm({ ...form, maxTransfers: Number(e.target.value) })}>
-              <option value={0}>0 · Direct uniquement</option>
-              <option value={1}>Jusqu'à 1 correspondance · direct inclus</option>
-              <option value={2}>Jusqu'à 2 correspondances · direct inclus</option>
-              <option value={3}>Jusqu'à 3 correspondances · direct inclus</option>
-            </select>
-          </label>
-          <label>
             <span>Voiture</span>
             <select value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value as SearchRequest["vehicleType"] })}>
               <option value="electric">Électrique</option>
@@ -138,7 +128,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.0 : l’app privilégie un départ le jour demandé. Si nécessaire, elle teste d’abord davantage de voiture, puis une arrivée plus tardive ; la veille n’est proposée qu’en dernier recours.</p>
+        <p className="form-hint">V0.2.1 : les correspondances sont automatiques. L’app cherche d’abord en direct, puis 1, 2 ou 3 correspondances seulement si nécessaire, avant d’élargir l’horaire.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -156,7 +146,7 @@ export default function SearchForm() {
           <div className="provider-status">
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
-            <span>🔀 {result.request.maxTransfers === 0 ? "Direct uniquement" : `${result.request.maxTransfers} correspondance${result.request.maxTransfers > 1 ? "s" : ""} max`}</span>
+            <span>🔀 Auto · jusqu’à {result.usedMaxTransfers} correspondance{result.usedMaxTransfers > 1 ? "s" : ""}</span>
           </div>
 
           {result.adjustment.kind !== "none" && (

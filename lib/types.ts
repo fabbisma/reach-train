@@ -24,7 +24,6 @@ export type SearchRequest = {
   time: string;
   mode: SearchMode;
   maxDriveMinutes: number;
-  maxTransfers: number;
   vehicleType: VehicleType;
 };
 
@@ -96,6 +95,7 @@ export type SearchResponse = {
   options: JourneyOption[];
   viableStationCount: number;
   paretoStationCount: number;
+  usedMaxTransfers: number;
   providers: {
     road: ProviderStatus;
     rail: ProviderStatus;

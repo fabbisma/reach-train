@@ -142,3 +142,12 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - Les gares réellement les plus proches sont désormais toujours conservées parmi les candidates, même si de grands hubs obtiennent un meilleur score stratégique.
 - Quand l'heure d'arrivée doit être dépassée, chaque carte indique précisément le retard par rapport à l'heure souhaitée.
 - Un bandeau explique quand la recherche a été automatiquement élargie (plus de voiture, arrivée plus tardive, ou veille en dernier recours).
+
+## V0.2.1 — correspondances automatiques et recherche plus rapide
+
+- Suppression du filtre manuel du nombre de correspondances.
+- Recherche automatique par paliers : direct, puis jusqu'à 1, 2 et 3 correspondances uniquement si nécessaire.
+- Une seule liste de gares proches + hubs stratégiques est calculée, au lieu de relancer plusieurs recherches élargies.
+- En mode « Arriver avant », les départs de la veille sont conservés comme secours ; si aucun départ le jour demandé n'est trouvé à l'heure cible, l'app teste ensuite +1 h puis +2 h avant d'afficher la veille.
+- Le statut des résultats indique le nombre maximal de correspondances réellement nécessaire pour le palier retenu.
+- Transitous ne relance plus une requête direct-only supplémentaire dans chaque gare : le moteur global gère désormais cette progression.

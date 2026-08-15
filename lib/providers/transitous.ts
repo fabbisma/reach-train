@@ -116,7 +116,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.0 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.2.1 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -175,17 +175,12 @@ export class TransitousRailProvider implements RailProvider {
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
   }): Promise<RailLeg | null> {
-    let itineraries = await this.fetchItineraries(params);
+    const itineraries = await this.fetchItineraries(params);
     if (!itineraries.length) return null;
 
-    // MOTIS peut ne retourner que les itinéraires optimaux pour le plafond
-    // demandé. Si maxTransfers > 0 et qu'aucun direct n'est présent dans cette
-    // réponse, on fait une vérification ciblée en direct-only.
-    if (params.maxTransfers > 0 && !itineraries.some((itinerary) => Math.max(0, itinerary.transfers) === 0)) {
-      const directItineraries = await this.fetchItineraries({ ...params, maxTransfers: 0 });
-      if (directItineraries.length) itineraries = [...directItineraries, ...itineraries];
-    }
-
+    // Le moteur global teste désormais 0, puis 1, puis 2 correspondances.
+    // On évite donc ici la seconde requête direct-only qui doublait parfois
+    // le temps de réponse.
     const itinerary = this.bestItinerary(itineraries, params.mode, params.searchAt);
     if (!itinerary) return null;
 

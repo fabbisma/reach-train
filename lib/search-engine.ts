@@ -13,6 +13,7 @@ const COMFORT_EXTRA_MINUTES = 10;
 const MAX_AUTO_TRANSFERS = 3;
 const MAX_FALLBACK_TRANSFERS = 5;
 const MAX_EXTENDED_DRIVE_MINUTES = 360;
+const MAX_MULTIMODAL_VS_CAR_RATIO = 1.5;
 
 function transitousContact() {
   if (process.env.TRANSITOUS_CONTACT) return process.env.TRANSITOUS_CONTACT;
@@ -587,8 +588,15 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     }
   });
 
-  const requestedDayOptions = rawOptions.filter((option) => option.departureDay === "requestedDay");
-  const rawPreviousDayOptions = rawOptions.filter((option) => option.departureDay === "previousDay");
+  // V0.3.3 : garde-fou simple et lisible. Une proposition multimodale
+  // n'est jamais affichée si son temps porte-à-porte dépasse 150 % du
+  // trajet 100 % voiture calculé avec le même provider routier.
+  const maxMultimodalMinutes = Math.round(directRoad.durationMinutes * MAX_MULTIMODAL_VS_CAR_RATIO);
+  const eligibleOptions = rawOptions.filter((option) => option.totalMinutes <= maxMultimodalMinutes);
+  const filteredByCarRatioCount = rawOptions.length - eligibleOptions.length;
+
+  const requestedDayOptions = eligibleOptions.filter((option) => option.departureDay === "requestedDay");
+  const rawPreviousDayOptions = eligibleOptions.filter((option) => option.departureDay === "previousDay");
   const previousDayOptions = keepSensiblePreviousDayOptions(rawPreviousDayOptions, requestedDayOptions, directRoad);
   const summarized = [
     ...summarizeDay(requestedDayOptions, request, targetTimeZone),
@@ -604,6 +612,8 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
   notes.push("La recherche autorise train, RER, métro, tram et bus dans les correspondances, avec au moins un segment ferroviaire obligatoire.");
+  notes.push("Les options dont le temps porte-à-porte dépasse 150 % du temps du trajet 100 % voiture sont automatiquement masquées.");
+  if (filteredByCarRatioCount > 0) notes.push(`${filteredByCarRatioCount} option(s) ont été écartées par le plafond de 150 % du temps voiture.`);
   notes.push("La recherche essaie d’abord jusqu’à 3 correspondances et peut élargir automatiquement jusqu’à 5 si aucune solution n’est trouvée.");
   notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
   if (request.mode === "arriveBy") notes.push("La veille n’est affichée que si elle reste raisonnable ou apporte un avantage réel par rapport aux solutions du jour J ; les trajets dominés ou avec attentes nocturnes absurdes sont masqués.");
@@ -611,7 +621,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   notes.push(`Fuseaux détectés : départ ${originTimeZone} · destination ${destinationTimeZone}.`);
   notes.push("Les coûts et le CO₂ restent des estimations. La comparaison 100 % voiture utilise le même provider routier que les accès aux gares.");
 
-  const uniqueViableStations = new Set(rawOptions.map((option) => option.station.id)).size;
+  const uniqueViableStations = new Set(eligibleOptions.map((option) => option.station.id)).size;
 
   return {
     mode,
@@ -622,7 +632,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     options: summarized,
     viableStationCount: uniqueViableStations,
     candidateStationCount: candidates.length,
-    paretoStationCount: simplePareto(rawOptions).length,
+    paretoStationCount: simplePareto(eligibleOptions).length,
     usedMaxTransfers: MAX_FALLBACK_TRANSFERS,
     providers: {
       road: { name: roadName, live: roadLive },

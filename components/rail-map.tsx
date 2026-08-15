@@ -98,12 +98,14 @@ export default function RailMap({ option, origin, destination }: { option: Journ
         if (disposed || !elementRef.current) return;
 
         const map = L.map(elementRef.current, {
-          zoomControl: false,
+          zoomControl: true,
           attributionControl: true,
-          scrollWheelZoom: false,
-          doubleClickZoom: false,
-          boxZoom: false,
-          keyboard: false
+          scrollWheelZoom: true,
+          doubleClickZoom: true,
+          boxZoom: true,
+          keyboard: true,
+          touchZoom: true,
+          dragging: true
         });
 
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -176,7 +178,7 @@ export default function RailMap({ option, origin, destination }: { option: Journ
     <div className="rail-map-wrap">
       <div className="rail-map-head">
         <strong>🗺️ Voiture + train</strong>
-        <span>Fond OpenStreetMap · zoomez ou déplacez la carte si besoin</span>
+        <span>Carte interactive · +/−, molette, pincement et déplacement</span>
       </div>
       <div ref={elementRef} className="rail-map" aria-label={`Carte multimodale ${routeNames.join(" vers ")}`} />
       <div className="rail-map-legend">

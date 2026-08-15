@@ -319,7 +319,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.2 Global Beta : lieux confirmés, train + RER/métro/tram/bus, et filtrage des trajets absurdes de la veille.</p>
+        <p className="form-hint">V0.3.3 Global Beta : lieux confirmés, transports publics complets, plafond à 150 % du temps voiture et carte zoomable.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -335,7 +335,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.2 Global Beta</span>
+            <span>🌍 V0.3.3 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -354,7 +354,7 @@ export default function SearchForm() {
           )}
 
           {result.options.length === 0 ? (
-            <div className="empty">Aucune solution train + transports publics trouvée pour le jour J ou la veille.</div>
+            <div className="empty">Aucune solution multimodale respectant le plafond de 150 % du temps du trajet voiture pour le jour J ou la veille.</div>
           ) : (
             <>
               {[

@@ -1,4 +1,4 @@
-# Eco Rail Planner — V0.3.2 Global Beta
+# Eco Rail Planner — V0.3.3 Global Beta
 
 Clean full-project baseline rebuilt from the stable V0.2.8.1 UI/map behavior plus the V0.3 dynamic-station engine.
 
@@ -70,3 +70,11 @@ See `.env.example`. Existing Vercel environment variables can be kept.
 ## V0.3.2
 - Transit après la gare : rail + RER/métro + tram + bus (au moins un segment ferroviaire requis).
 - Filtrage des solutions de la veille dominées ou excessivement longues.
+
+
+## V0.3.3
+
+- Plafond dur : une option multimodale est masquée si son temps total dépasse 150 % du temps du trajet 100 % voiture.
+- Le plafond s'applique au jour J comme à la veille avant le classement Top 3.
+- La mini-carte Leaflet devient pleinement interactive : boutons +/−, molette, double-clic, pincement tactile et déplacement.
+- Le zoom automatique initial reste conservé pour montrer l'ensemble du trajet.

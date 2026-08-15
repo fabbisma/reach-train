@@ -266,6 +266,13 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
 }
 .rail-map .leaflet-control-attribution { font-size: 8px; }
 
+.rail-map .leaflet-control-zoom a {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 18px;
+}
+
 .rail-segments {
   padding: 12px 14px 14px;
 }
@@ -344,7 +351,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .rail-map-head span { text-align: left; }
 }
 
-/* V0.3.2 — validation obligatoire des lieux */
+/* V0.3.3 — validation obligatoire des lieux */
 .location-field { position: relative; min-width: 0; }
 .location-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 7px; }
 .location-input-wrap { position: relative; }

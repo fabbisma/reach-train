@@ -123,7 +123,7 @@ export default function SearchForm() {
               <p className="eyebrow">{result.mode === "demo" ? "MODE DÉMO" : "DONNÉES RÉELLES"}</p>
               <h2>{result.origin.name} → {result.destination.name}</h2>
             </div>
-            <span className="result-count">{result.options.length} options retenues</span>
+            <span className="result-count">{result.options.length} affichées · {result.viableStationCount} gares viables</span>
           </div>
 
           {result.options.length === 0 ? (
@@ -158,6 +158,7 @@ export default function SearchForm() {
           )}
 
           <div className="notes">
+            <p>• {result.paretoStationCount} gare{result.paretoStationCount > 1 ? "s" : ""} sur la frontière Pareto ; les autres cartes affichées servent d'alternatives utiles pour le test.</p>
             {result.notes.map((note) => <p key={note}>• {note}</p>)}
           </div>
         </section>

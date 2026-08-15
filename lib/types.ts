@@ -66,5 +66,7 @@ export type SearchResponse = {
   origin: Place;
   destination: Place;
   options: JourneyOption[];
+  viableStationCount: number;
+  paretoStationCount: number;
   notes: string[];
 };

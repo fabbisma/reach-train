@@ -67,3 +67,11 @@ lib/
     google-routes.ts        trajet routier réel
     navitia.ts              trajet ferroviaire réel
 ```
+
+
+## V0.1.2
+
+- Ne coupe plus la liste des gares trop tôt avant le calcul routier.
+- Conserve la frontière Pareto mais complète l'affichage jusqu'à 6 alternatives utiles pendant le MVP.
+- Affiche le nombre de gares réellement viables avec la limite de conduite choisie.
+- Corrige notamment le test Courlaoux → Düsseldorf qui pouvait ne montrer que Dijon et Besançon.

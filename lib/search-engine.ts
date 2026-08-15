@@ -50,9 +50,12 @@ function candidateStations(origin: { lat: number; lng: number }, destination: { 
       const strategicScore = station.importance * 0.55 + (1 / Math.max(1, detourRatio)) * 0.3 + (1 / Math.max(1, originKm / 30)) * 0.15;
       return { station, driveEstimate, detourRatio, strategicScore };
     })
-    .filter((x) => x.driveEstimate <= maxDriveMinutes * 1.18 && x.detourRatio <= 1.55)
+    // Le filtre reste volontairement large : le vrai contrôle de la limite de
+    // conduite se fait ensuite avec le RoadProvider. On évite ainsi de perdre
+    // une gare utile à cause d'une estimation géométrique trop grossière.
+    .filter((x) => x.driveEstimate <= maxDriveMinutes * 1.35 && x.detourRatio <= 1.65)
     .sort((a, b) => b.strategicScore - a.strategicScore)
-    .slice(0, 7)
+    .slice(0, 14)
     .map((x) => x.station);
 }
 
@@ -83,20 +86,22 @@ function normalize(values: number[], value: number) {
   return max === min ? 0 : (value - min) / (max - min);
 }
 
-function labelAndSort(options: JourneyOption[]) {
+function labelAndSort(options: JourneyOption[], paretoOptions: JourneyOption[]) {
   if (!options.length) return options;
   const time = options.map((x) => x.totalMinutes);
   const co2 = options.map((x) => x.co2Kg);
   const cost = options.map((x) => x.estimatedCostEur);
 
   for (const option of options) {
+    option.labels = [];
     option.score = normalize(time, option.totalMinutes) * 0.48 + normalize(co2, option.co2Kg) * 0.34 + normalize(cost, option.estimatedCostEur) * 0.18;
   }
 
   const fastest = [...options].sort((a, b) => a.totalMinutes - b.totalMinutes)[0];
   const greenest = [...options].sort((a, b) => a.co2Kg - b.co2Kg)[0];
   const cheapest = [...options].sort((a, b) => a.estimatedCostEur - b.estimatedCostEur)[0];
-  const recommended = [...options].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
+  const recommendedPool = paretoOptions.length ? paretoOptions : options;
+  const recommended = [...recommendedPool].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))[0];
 
   for (const option of options) {
     if (option.id === recommended.id) option.labels.push("recommended");
@@ -105,7 +110,33 @@ function labelAndSort(options: JourneyOption[]) {
     if (option.id === cheapest.id) option.labels.push("cheapest");
   }
 
-  return [...options].sort((a, b) => (a.score ?? 0) - (b.score ?? 0)).slice(0, 4);
+  // On conserve d'abord toute la frontière Pareto. Pendant le MVP, si elle
+  // contient trop peu de gares, on complète avec des alternatives réellement
+  // différentes : gare la plus proche, moins de correspondances et meilleur
+  // score global. Cela rend le moteur testable sans masquer les possibilités.
+  const selected = new Map<string, JourneyOption>();
+  for (const option of [...paretoOptions].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))) {
+    selected.set(option.id, option);
+  }
+
+  const closest = [...options].sort((a, b) => a.drive.durationMinutes - b.drive.durationMinutes)[0];
+  const fewestChanges = [...options].sort((a, b) => a.rail.changes - b.rail.changes || a.totalMinutes - b.totalMinutes)[0];
+  for (const option of [recommended, fastest, greenest, cheapest, closest, fewestChanges]) {
+    if (option) selected.set(option.id, option);
+  }
+
+  for (const option of [...options].sort((a, b) => (a.score ?? 0) - (b.score ?? 0))) {
+    if (selected.size >= 6) break;
+    selected.set(option.id, option);
+  }
+
+  return [...selected.values()]
+    .sort((a, b) => {
+      const ar = a.id === recommended.id ? -1 : 0;
+      const br = b.id === recommended.id ? -1 : 0;
+      return ar - br || (a.score ?? 0) - (b.score ?? 0);
+    })
+    .slice(0, 6);
 }
 
 async function buildOption(params: {
@@ -193,15 +224,18 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   const directRoad = await road.route(origin, destination);
   const stations = candidateStations(origin, destination, request.maxDriveMinutes);
   const options = (await Promise.all(stations.map((station) => buildOption({ station, request, origin, destination, road, rail, directRoadKm: directRoad.distanceKm })))).filter((x): x is JourneyOption => Boolean(x));
+  const paretoOptions = pareto(options);
 
   return {
     mode: live ? "live" : "demo",
     request,
     origin,
     destination,
-    options: labelAndSort(pareto(options)),
+    options: labelAndSort(options, paretoOptions),
+    viableStationCount: options.length,
+    paretoStationCount: paretoOptions.length,
     notes: live
-      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.1."]
+      ? [`Google Routes et ${railName} sont actifs.`, "Les coûts et le CO₂ restent des estimations V0.1.2."]
       : destination.countryCode && destination.countryCode !== "FR"
         ? [
             "Mode démo international : horaires ferroviaires simulés tant que TRANSITOUS_CONTACT n'est pas renseigné.",

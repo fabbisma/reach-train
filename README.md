@@ -168,3 +168,14 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - Si ce direct dépasse la préférence voiture, le moteur continue avec 1, puis 2, puis 3 correspondances sur les gares proches.
 - La recherche s'arrête dès qu'elle dispose d'un direct et d'au moins une alternative dans la limite voiture, ou de plusieurs alternatives proches si aucun direct n'existe.
 - Objectif : afficher simultanément le direct le plus accessible, la gare la plus proche et le meilleur compromis.
+
+## V0.2.4 — quatre critères, Jour J + veille
+
+La synthèse ne fusionne plus les catégories. Pour chaque jour de départ disponible (Jour J et veille), l'application calcule indépendamment :
+
+1. **Gare la plus proche** : minimum de temps de voiture parmi les gares qui proposent un trajet ferroviaire valable.
+2. **Train le plus court dans le périmètre** : minimum de temps de train parmi les gares dont le trajet voiture respecte la limite choisie.
+3. **Train le plus court avec conduite étendue** : minimum de temps de train parmi les gares au-delà de la limite choisie, jusqu'à environ 6 h de voiture.
+4. **Trajet total le plus court** : minimum porte-à-porte voiture + marge gare + train.
+
+Le nombre de correspondances n'est plus un filtre utilisateur : jusqu'à 3 sont autorisées automatiquement, puis les critères ci-dessus décident quelles options afficher. Les correspondances et leurs temps de transit restent détaillés sur chaque carte.

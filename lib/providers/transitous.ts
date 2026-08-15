@@ -116,7 +116,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.2 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.2.4 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -138,68 +138,40 @@ export class TransitousRailProvider implements RailProvider {
     });
   }
 
-  private bestItinerary(
-    itineraries: TransitousItinerary[],
-    mode: "arriveBy" | "departAt",
-    searchAt: string
-  ): TransitousItinerary | undefined {
-    const targetDate = localDateKey(searchAt);
-    return [...itineraries].sort((a, b) => {
-      if (mode === "arriveBy") {
-        // Évite qu'un direct de la veille masque un bon trajet le jour même.
-        // Le nombre de correspondances reste un plafond, pas une obligation.
-        const sameDayA = localDateKey(a.startTime) === targetDate ? 0 : 1;
-        const sameDayB = localDateKey(b.startTime) === targetDate ? 0 : 1;
-        if (sameDayA !== sameDayB) return sameDayA - sameDayB;
-      }
 
-      if (mode === "departAt") {
-        const arrivalDelta = new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
-        if (arrivalDelta !== 0) return arrivalDelta;
-      }
-
-      const transferDelta = Math.max(0, a.transfers) - Math.max(0, b.transfers);
-      if (transferDelta !== 0) return transferDelta;
-
-      if (mode === "arriveBy") {
-        return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
-      }
-      return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-    })[0];
-  }
-
-  async journey(params: {
+  async journeys(params: {
     station: Station;
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
-  }): Promise<RailLeg | null> {
+  }): Promise<RailLeg[]> {
     const itineraries = await this.fetchItineraries(params);
-    if (!itineraries.length) return null;
 
-    // Le moteur global teste désormais 0, puis 1, puis 2 correspondances.
-    // On évite donc ici la seconde requête direct-only qui doublait parfois
-    // le temps de réponse.
-    const itinerary = this.bestItinerary(itineraries, params.mode, params.searchAt);
-    if (!itinerary) return null;
+    return itineraries
+      .map((itinerary) => {
+        const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
+        const services = [...new Set(
+          railLegs
+            .map((leg) => serviceName(leg))
+            .filter((value): value is string => Boolean(value))
+        )].slice(0, 5);
 
-    const railLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
-    const services = [...new Set(
-      railLegs
-        .map((leg) => serviceName(leg))
-        .filter((value): value is string => Boolean(value))
-    )].slice(0, 5);
-
-    return {
-      distanceKm: Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
-      durationMinutes: Math.max(1, Math.round(itinerary.duration / 60)),
-      departureAt: new Date(itinerary.startTime).toISOString(),
-      arrivalAt: new Date(itinerary.endTime).toISOString(),
-      changes: Math.max(0, itinerary.transfers),
-      services,
-      realtime: railLegs.some((leg) => leg.realTime === true),
-      transfers: transferDetails(railLegs)
-    };
+        return {
+          distanceKm: Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
+          durationMinutes: Math.max(1, Math.round(itinerary.duration / 60)),
+          departureAt: new Date(itinerary.startTime).toISOString(),
+          arrivalAt: new Date(itinerary.endTime).toISOString(),
+          changes: Math.max(0, itinerary.transfers),
+          services,
+          realtime: railLegs.some((leg) => leg.realTime === true),
+          transfers: transferDetails(railLegs)
+        } satisfies RailLeg;
+      })
+      .sort((a, b) =>
+        a.durationMinutes - b.durationMinutes ||
+        a.changes - b.changes ||
+        new Date(b.departureAt).getTime() - new Date(a.departureAt).getTime()
+      );
   }
 }

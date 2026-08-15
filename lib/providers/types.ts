@@ -5,11 +5,11 @@ export interface RoadProvider {
 }
 
 export interface RailProvider {
-  journey(params: {
+  journeys(params: {
     station: Station;
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
-  }): Promise<RailLeg | null>;
+  }): Promise<RailLeg[]>;
 }

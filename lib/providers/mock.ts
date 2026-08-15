@@ -13,45 +13,56 @@ export class MockRoadProvider implements RoadProvider {
 }
 
 export class MockRailProvider implements RailProvider {
-  async journey(params: {
+  async journeys(params: {
     station: Station;
     destination: Place;
     searchAt: string;
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
-  }): Promise<RailLeg | null> {
+  }): Promise<RailLeg[]> {
     const crowKm = haversineKm(params.station, params.destination);
-    if (crowKm < 35) return null;
+    if (crowKm < 35) return [];
 
     const railDistanceKm = crowKm * 1.08;
     const effectiveSpeed = 85 + params.station.importance * 95;
     const durationMinutes = Math.round((railDistanceKm / effectiveSpeed) * 60 + (1 - params.station.importance) * 28 + 12);
     const changes = params.station.importance > 0.78 ? 0 : params.station.importance > 0.55 ? 1 : 2;
-    if (changes > params.maxTransfers) return null;
+    if (changes > params.maxTransfers) return [];
 
-    let departureAt: string;
-    let arrivalAt: string;
-
-    if (params.mode === "arriveBy") {
-      const target = new Date(params.searchAt);
-      const slot = Math.max(12, Math.round(38 - params.station.importance * 20));
-      const arrivalCandidate = new Date(target.getTime() - slot * 60_000).toISOString();
-      arrivalAt = arrivalCandidate;
-      departureAt = addMinutes(arrivalAt, -durationMinutes);
-    } else {
+    if (params.mode === "departAt") {
       const frequency = params.station.importance > 0.8 ? 15 : params.station.importance > 0.6 ? 30 : 45;
-      departureAt = roundUpToMinutes(params.searchAt, frequency);
-      arrivalAt = addMinutes(departureAt, durationMinutes);
+      const departureAt = roundUpToMinutes(params.searchAt, frequency);
+      return [{
+        distanceKm: Math.round(railDistanceKm * 10) / 10,
+        durationMinutes,
+        departureAt,
+        arrivalAt: addMinutes(departureAt, durationMinutes),
+        changes
+      }];
     }
 
-    const result: RailLeg = {
-      distanceKm: Math.round(railDistanceKm * 10) / 10,
-      durationMinutes,
-      departureAt,
-      arrivalAt,
-      changes
-    };
+    const target = new Date(params.searchAt);
+    const slot = Math.max(12, Math.round(38 - params.station.importance * 20));
+    const arrivalAt = new Date(target.getTime() - slot * 60_000).toISOString();
+    const dayDeparture = addMinutes(arrivalAt, -durationMinutes);
+    const previousDeparture = addMinutes(dayDeparture, -24 * 60);
+    const previousArrival = addMinutes(arrivalAt, -24 * 60);
 
-    return result;
+    return [
+      {
+        distanceKm: Math.round(railDistanceKm * 10) / 10,
+        durationMinutes,
+        departureAt: dayDeparture,
+        arrivalAt,
+        changes
+      },
+      {
+        distanceKm: Math.round(railDistanceKm * 10) / 10,
+        durationMinutes,
+        departureAt: previousDeparture,
+        arrivalAt: previousArrival,
+        changes
+      }
+    ];
   }
 }

@@ -12,9 +12,6 @@ function tomorrowLocal() {
   return `${y}-${m}-${day}`;
 }
 
-function fmtTime(iso: string) {
-  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(iso));
-}
 
 function fmtDateTime(iso: string) {
   return new Intl.DateTimeFormat("fr-FR", {
@@ -34,17 +31,13 @@ function fmtDuration(minutes: number) {
 }
 
 const labelText = {
-  closestDrive: "🚗 Gare la plus proche",
-  bestCompromise: "⚖️ Meilleur compromis",
-  bestArrivalFit: "🎯 Arrivée la plus proche"
+  closestStation: "🚗 Gare la plus proche",
+  fastestRailWithinLimit: "⏱️ Train le plus court · dans le périmètre",
+  fastestRailExtended: "🚙⏱️ Train le plus court · conduite étendue",
+  fastestTotal: "🏁 Trajet total le plus court"
 } as const;
 
-function recommendationLabel(label: SearchResponse["options"][number]["labels"][number], option: SearchResponse["options"][number]) {
-  if (label === "mostDirectRail") {
-    return option.rail.changes === 0
-      ? "🚆 Direct · gare la plus proche"
-      : `🚆 Le plus direct · ${option.rail.changes} correspondance${option.rail.changes > 1 ? "s" : ""}`;
-  }
+function recommendationLabel(label: SearchResponse["options"][number]["labels"][number]) {
   return labelText[label];
 }
 
@@ -136,7 +129,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.3 : l’app conserve le meilleur direct même s’il est loin, puis cherche aussi des gares plus proches avec correspondances lorsqu’aucun direct ne respecte la préférence voiture.</p>
+        <p className="form-hint">V0.2.4 : 4 critères indépendants sont comparés pour le jour J et la veille. Le nombre de correspondances est géré automatiquement (jusqu’à 3).</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -154,7 +147,7 @@ export default function SearchForm() {
           <div className="provider-status">
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
-            <span>🔀 Auto · jusqu’à {result.usedMaxTransfers} correspondance{result.usedMaxTransfers > 1 ? "s" : ""}</span>
+            <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
           </div>
 
           {result.adjustment.kind !== "none" && (
@@ -165,13 +158,28 @@ export default function SearchForm() {
           )}
 
           {result.options.length === 0 ? (
-            <div className="empty">Aucune gare intéressante trouvée avec cette limite de conduite.</div>
+            <div className="empty">Aucune solution ferroviaire trouvée pour le jour J ou la veille.</div>
           ) : (
-            <div className="option-grid">
-              {result.options.map((option) => (
+            <>
+              {[
+                { key: "requestedDay" as const, title: "📅 Jour J", subtitle: `Départ le ${result.request.date}` },
+                { key: "previousDay" as const, title: "🌙 La veille", subtitle: "Départ la veille de la date demandée" }
+              ].map((group) => {
+                const groupOptions = result.options.filter((option) => option.departureDay === group.key);
+                return (
+                  <div className="result-day-group" key={group.key}>
+                    <div className="day-group-head">
+                      <h3>{group.title}</h3>
+                      <span>{group.subtitle}</span>
+                    </div>
+                    {groupOptions.length === 0 ? (
+                      <div className="empty">Aucune solution trouvée pour ce jour de départ.</div>
+                    ) : (
+                      <div className="option-grid">
+                        {groupOptions.map((option) => (
                 <article className="option-card" key={option.id}>
                   <div className="badges">
-                    {option.labels.map((label) => <span key={label}>{recommendationLabel(label, option)}</span>)}
+                    {option.labels.map((label) => <span key={label}>{recommendationLabel(label)}</span>)}
                   </div>
                   <h3>{option.station.name}</h3>
                   {option.warnings.length > 0 && (
@@ -210,8 +218,13 @@ export default function SearchForm() {
                     <div><span>Voiture évitée</span><strong>{option.carKmAvoided} km</strong></div>
                   </div>
                 </article>
-              ))}
-            </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
           )}
 
           <div className="notes">

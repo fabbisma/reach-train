@@ -71,7 +71,8 @@ export type JourneyOption = {
   isStrategicException: boolean;
   driveLimitExceededBy: number;
   score?: number;
-  labels: Array<"closestDrive" | "mostDirectRail" | "bestCompromise" | "bestArrivalFit">;
+  departureDay: "requestedDay" | "previousDay";
+  labels: Array<"closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal">;
   warnings: string[];
 };
 

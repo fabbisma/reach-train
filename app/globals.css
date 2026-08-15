@@ -140,3 +140,25 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   background: #f1f7fb;
   color: #28536b;
 }
+
+.result-day-group {
+  margin-top: 22px;
+}
+
+.day-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.day-group-head h3 {
+  margin: 0;
+  font-size: 1.12rem;
+}
+
+.day-group-head span {
+  color: var(--muted, #65717d);
+  font-size: 0.86rem;
+}

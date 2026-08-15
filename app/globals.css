@@ -245,6 +245,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   border-top-style: dashed;
 }
 .rail-map-legend .legend-rail { border-top-color: #2b8a5a; }
+.rail-map-legend .legend-last-mile { border-top-color: #6b7280; border-top-style: dashed; }
 
 .rail-map-route {
   padding: 7px 14px 10px;
@@ -351,7 +352,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .rail-map-head span { text-align: left; }
 }
 
-/* V0.3.3 — validation obligatoire des lieux */
+/* V0.3.4 — validation obligatoire des lieux */
 .location-field { position: relative; min-width: 0; }
 .location-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 7px; }
 .location-input-wrap { position: relative; }
@@ -414,3 +415,25 @@ button.location-suggestion:hover { background: #f2f8f4; }
 .location-suggestion.muted { color: var(--muted); font-size: 11px; cursor: default; }
 .location-kind { flex: 0 0 auto; font-size: 16px; line-height: 1.2; }
 .primary:disabled { cursor: not-allowed; }
+
+.last-mile-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 14px;
+  margin: 0 14px 14px;
+  padding: 11px 12px;
+  border: 1px solid #ead9be;
+  border-radius: 12px;
+  background: #fffaf1;
+}
+.last-mile-card > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.last-mile-card strong { font-size: 12px; color: #674b21; }
+.last-mile-card span { font-size: 11px; color: var(--muted); }
+.last-mile-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.last-mile-distance b { font-size: 15px; color: #9a5a13; }
+.last-mile-distance small { max-width: 160px; color: var(--muted); font-size: 9px; }
+.last-mile-card p { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted); font-size: 9px; }
+@media (max-width: 520px) {
+  .last-mile-card { grid-template-columns: 1fr; }
+  .last-mile-distance { align-items: flex-start; text-align: left; }
+}

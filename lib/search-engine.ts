@@ -14,6 +14,7 @@ const MAX_AUTO_TRANSFERS = 3;
 const MAX_FALLBACK_TRANSFERS = 5;
 const MAX_EXTENDED_DRIVE_MINUTES = 360;
 const MAX_MULTIMODAL_VS_CAR_RATIO = 1.5;
+const MAX_DRIVE_DISTANCE_SHARE = 0.6;
 
 function transitousContact() {
   if (process.env.TRANSITOUS_CONTACT) return process.env.TRANSITOUS_CONTACT;
@@ -276,6 +277,11 @@ async function evaluateStation(params: {
 }): Promise<JourneyOption[]> {
   const roadLeg = await params.road.route(params.origin, params.candidate.station);
   if (roadLeg.durationMinutes > params.candidate.allowedDriveMinutes) return [];
+
+  // V0.3.4 : une solution où l'on conduit déjà l'essentiel du trajet
+  // n'a pas d'intérêt multimodal. On écarte la gare avant même d'interroger
+  // le rail si l'accès voiture dépasse 60 % des kilomètres de la voiture seule.
+  if (params.directRoadKm > 0 && roadLeg.distanceKm > params.directRoadKm * MAX_DRIVE_DISTANCE_SHARE) return [];
 
   const railSearchAt = params.request.mode === "departAt"
     ? addMinutes(params.targetIso, roadLeg.durationMinutes + STATION_BUFFER_MINUTES)
@@ -588,12 +594,15 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     }
   });
 
-  // V0.3.3 : garde-fou simple et lisible. Une proposition multimodale
-  // n'est jamais affichée si son temps porte-à-porte dépasse 150 % du
-  // trajet 100 % voiture calculé avec le même provider routier.
+  // V0.3.4 : double garde-fou d'intérêt pratique.
+  // 1) pas plus de 60 % des kilomètres du trajet voiture effectués en voiture ;
+  // 2) pas plus de 150 % du temps du trajet voiture en porte-à-porte.
   const maxMultimodalMinutes = Math.round(directRoad.durationMinutes * MAX_MULTIMODAL_VS_CAR_RATIO);
-  const eligibleOptions = rawOptions.filter((option) => option.totalMinutes <= maxMultimodalMinutes);
-  const filteredByCarRatioCount = rawOptions.length - eligibleOptions.length;
+  const maxDriveDistanceKm = directRoad.distanceKm * MAX_DRIVE_DISTANCE_SHARE;
+  const distanceEligibleOptions = rawOptions.filter((option) => option.drive.distanceKm <= maxDriveDistanceKm);
+  const filteredByDriveShareCount = rawOptions.length - distanceEligibleOptions.length;
+  const eligibleOptions = distanceEligibleOptions.filter((option) => option.totalMinutes <= maxMultimodalMinutes);
+  const filteredByCarRatioCount = distanceEligibleOptions.length - eligibleOptions.length;
 
   const requestedDayOptions = eligibleOptions.filter((option) => option.departureDay === "requestedDay");
   const rawPreviousDayOptions = eligibleOptions.filter((option) => option.departureDay === "previousDay");
@@ -612,6 +621,8 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
   notes.push("La recherche autorise train, RER, métro, tram et bus dans les correspondances, avec au moins un segment ferroviaire obligatoire.");
+  notes.push("Les options dont l'accès en voiture dépasse 60 % des kilomètres du trajet 100 % voiture sont automatiquement masquées.");
+  if (filteredByDriveShareCount > 0) notes.push(`${filteredByDriveShareCount} option(s) ont été écartées car la voiture représentait plus de 60 % de la distance du trajet voiture seul.`);
   notes.push("Les options dont le temps porte-à-porte dépasse 150 % du temps du trajet 100 % voiture sont automatiquement masquées.");
   if (filteredByCarRatioCount > 0) notes.push(`${filteredByCarRatioCount} option(s) ont été écartées par le plafond de 150 % du temps voiture.`);
   notes.push("La recherche essaie d’abord jusqu’à 3 correspondances et peut élargir automatiquement jusqu’à 5 si aucune solution n’est trouvée.");

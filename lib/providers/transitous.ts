@@ -189,7 +189,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.3.2 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.3.4 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -240,6 +240,15 @@ export class TransitousRailProvider implements RailProvider {
             .filter((value): value is string => Boolean(value))
         )].slice(0, 5);
 
+        const lastTransitLeg = transitLegs[transitLegs.length - 1];
+        const lastTransitPlace = lastTransitLeg?.to;
+        const lastMileDistanceKm = lastTransitPlace?.lat != null && lastTransitPlace?.lon != null
+          ? Math.round(haversineKm(
+              { lat: lastTransitPlace.lat, lng: lastTransitPlace.lon },
+              params.destination
+            ) * 10) / 10
+          : undefined;
+
         return [{
           distanceKm: Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
           durationMinutes: Math.max(1, Math.round(itinerary.duration / 60)),
@@ -249,7 +258,9 @@ export class TransitousRailProvider implements RailProvider {
           services,
           realtime: transitLegs.some((leg) => leg.realTime === true),
           transfers: transferDetails(transitLegs),
-          segments: railSegments(transitLegs)
+          segments: railSegments(transitLegs),
+          lastTransitStopName: lastTransitPlace?.name?.trim(),
+          lastMileDistanceKm
         } satisfies RailLeg];
       })
       .sort((a, b) =>

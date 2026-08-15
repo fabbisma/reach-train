@@ -48,6 +48,14 @@ function recommendationLabel(label: RecommendationBadge) {
   return `${medal} ${labelText[label.criterion]}`;
 }
 
+function lastMileHint(distanceKm?: number) {
+  if (distanceKm == null) return undefined;
+  if (distanceKm <= 0.8) return "facilement faisable à pied";
+  if (distanceKm <= 2) return "marche possible, taxi selon bagages";
+  if (distanceKm <= 5) return "taxi ou transport local à envisager";
+  return "transport local ou taxi probablement nécessaire";
+}
+
 function segmentModeLabel(mode?: string) {
   switch (mode) {
     case "SUBWAY": return "🚇 Métro";
@@ -114,6 +122,20 @@ function RailDetails({ option, origin, destination }: { option: JourneyOption; o
             <span>Arrivée <b>{fmtDateTime(option.destinationArrivalAt, destination.timeZone)}</b></span>
           </div>
           {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}
+        </div>
+      )}
+
+      {option.rail.lastMileDistanceKm != null && (
+        <div className="last-mile-card">
+          <div>
+            <strong>📍 Dernier arrêt → adresse finale</strong>
+            <span>{option.rail.lastTransitStopName ?? lastStation} → {destination.name}</span>
+          </div>
+          <div className="last-mile-distance">
+            <b>~{option.rail.lastMileDistanceKm.toFixed(1)} km</b>
+            <small>{lastMileHint(option.rail.lastMileDistanceKm)}</small>
+          </div>
+          <p>Distance géographique approximative entre le dernier arrêt de transport public et l’adresse demandée.</p>
         </div>
       )}
     </div>
@@ -319,7 +341,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.3 Global Beta : lieux confirmés, transports publics complets, plafond à 150 % du temps voiture et carte zoomable.</p>
+        <p className="form-hint">V0.3.4 Global Beta : voiture limitée à 60 % des km, plafond à 150 % du temps voiture, dernier kilomètre affiché et carte zoomable.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -335,7 +357,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.3 Global Beta</span>
+            <span>🌍 V0.3.4 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>
@@ -354,7 +376,7 @@ export default function SearchForm() {
           )}
 
           {result.options.length === 0 ? (
-            <div className="empty">Aucune solution multimodale respectant le plafond de 150 % du temps du trajet voiture pour le jour J ou la veille.</div>
+            <div className="empty">Aucune solution multimodale respectant les garde-fous : maximum 60 % des kilomètres en voiture et 150 % du temps de la voiture seule.</div>
           ) : (
             <>
               {[
@@ -413,7 +435,7 @@ export default function SearchForm() {
                               <div className="metrics">
                                 <div><span>CO₂</span><strong>{option.co2Kg} kg</strong></div>
                                 <div><span>Coût estimé</span><strong>~{option.estimatedCostEur.toFixed(1)} €</strong></div>
-                                <div><span>Voiture utilisée</span><strong>{option.drive.distanceKm} km</strong></div>
+                                <div><span>Voiture utilisée</span><strong>{option.drive.distanceKm} km · {result.directCar.distanceKm > 0 ? Math.round((option.drive.distanceKm / result.directCar.distanceKm) * 100) : 0} %</strong></div>
                                 <div><span>Voiture évitée</span><strong>{option.carKmAvoided} km</strong></div>
                               </div>
                             </article>

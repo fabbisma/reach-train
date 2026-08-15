@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JourneyOption, LatLng, Place } from "@/lib/types";
 
-type MapPoint = LatLng & { name: string; kind: "origin" | "start" | "transfer" | "end" };
+type MapPoint = LatLng & { name: string; kind: "origin" | "start" | "transfer" | "end" | "destination" };
 
 function sameCoord(a: LatLng, b: LatLng) {
   return Math.abs(a.lat - b.lat) < 0.00001 && Math.abs(a.lng - b.lng) < 0.00001;
@@ -40,6 +40,17 @@ function buildRailGeometry(option: JourneyOption, destination: Place): LatLng[] 
   ];
 }
 
+function buildLastMileGeometry(option: JourneyOption, destination: Place): LatLng[] {
+  const segments = option.rail.segments ?? [];
+  const last = segments[segments.length - 1];
+  const from = last?.toLat != null && last?.toLng != null
+    ? { lat: last.toLat, lng: last.toLng }
+    : null;
+  const to = { lat: destination.lat, lng: destination.lng };
+  if (!from || sameCoord(from, to)) return [];
+  return [from, to];
+}
+
 function buildMarkers(option: JourneyOption, origin: Place, destination: Place): MapPoint[] {
   const segments = option.rail.segments ?? [];
   const markers: MapPoint[] = [{
@@ -69,12 +80,24 @@ function buildMarkers(option: JourneyOption, origin: Place, destination: Place):
   }
 
   const last = segments[segments.length - 1];
-  markers.push({
+  const lastPoint = {
     lat: last?.toLat ?? destination.lat,
-    lng: last?.toLng ?? destination.lng,
+    lng: last?.toLng ?? destination.lng
+  };
+  markers.push({
+    ...lastPoint,
     name: last?.toStation ?? destination.name,
     kind: "end"
   });
+
+  const destinationPoint = { lat: destination.lat, lng: destination.lng };
+  if (!sameCoord(lastPoint, destinationPoint)) {
+    markers.push({
+      ...destinationPoint,
+      name: destination.name,
+      kind: "destination"
+    });
+  }
 
   return markers.filter((marker, index, all) =>
     index === 0 || !sameCoord(marker, all[index - 1]) || marker.name !== all[index - 1].name
@@ -86,6 +109,7 @@ export default function RailMap({ option, origin, destination }: { option: Journ
   const [failed, setFailed] = useState(false);
   const roadGeometry = useMemo(() => buildRoadGeometry(option, origin), [option, origin]);
   const railGeometry = useMemo(() => buildRailGeometry(option, destination), [option, destination]);
+  const lastMileGeometry = useMemo(() => buildLastMileGeometry(option, destination), [option, destination]);
   const markers = useMemo(() => buildMarkers(option, origin, destination), [option, origin, destination]);
 
   useEffect(() => {
@@ -126,9 +150,24 @@ export default function RailMap({ option, origin, destination }: { option: Journ
           opacity: 0.9
         }).addTo(map);
 
+        const lastMileLine = lastMileGeometry.length >= 2
+          ? L.polyline(lastMileGeometry.map((point) => L.latLng(point.lat, point.lng)), {
+              color: "#6b7280",
+              weight: 3,
+              opacity: 0.85,
+              dashArray: "4 7"
+            }).addTo(map)
+          : null;
+
         markers.forEach((marker) => {
-          const radius = marker.kind === "transfer" ? 5 : 7;
-          const color = marker.kind === "origin" ? "#4f6f9f" : marker.kind === "end" ? "#263238" : "#2b8a5a";
+          const radius = marker.kind === "transfer" ? 5 : marker.kind === "destination" ? 8 : 7;
+          const color = marker.kind === "origin"
+            ? "#4f6f9f"
+            : marker.kind === "destination"
+              ? "#b45309"
+              : marker.kind === "end"
+                ? "#263238"
+                : "#2b8a5a";
           const point = L.circleMarker([marker.lat, marker.lng], {
             radius,
             weight: 3,
@@ -146,6 +185,7 @@ export default function RailMap({ option, origin, destination }: { option: Journ
 
         const bounds = roadLine.getBounds();
         bounds.extend(railLine.getBounds());
+        if (lastMileLine) bounds.extend(lastMileLine.getBounds());
         if (bounds.isValid()) map.fitBounds(bounds, { padding: [18, 18], maxZoom: 9 });
 
         const timer = window.setTimeout(() => map.invalidateSize(false), 80);
@@ -162,7 +202,7 @@ export default function RailMap({ option, origin, destination }: { option: Journ
       disposed = true;
       cleanup?.();
     };
-  }, [roadGeometry, railGeometry, markers]);
+  }, [roadGeometry, railGeometry, lastMileGeometry, markers]);
 
   const routeNames = markers.map((marker) => marker.name);
 
@@ -183,7 +223,10 @@ export default function RailMap({ option, origin, destination }: { option: Journ
       <div ref={elementRef} className="rail-map" aria-label={`Carte multimodale ${routeNames.join(" vers ")}`} />
       <div className="rail-map-legend">
         <span><i className="legend-road" />🚗 Voiture jusqu’à {option.station.name}</span>
-        <span><i className="legend-rail" />🚆 Train jusqu’à {destination.name}</span>
+        <span><i className="legend-rail" />🚆 Transports publics</span>
+        {option.rail.lastMileDistanceKm != null && option.rail.lastMileDistanceKm > 0.05 && (
+          <span><i className="legend-last-mile" />📍 Dernier arrêt → adresse (~{option.rail.lastMileDistanceKm.toFixed(1)} km)</span>
+        )}
       </div>
       <div className="rail-map-route">{routeNames.join(" → ")}</div>
     </div>

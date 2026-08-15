@@ -85,6 +85,8 @@ export type RailLeg = {
   realtime?: boolean;
   transfers?: RailTransfer[];
   segments?: RailSegment[];
+  lastTransitStopName?: string;
+  lastMileDistanceKm?: number;
 };
 
 export type RecommendationCriterion = "closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal";

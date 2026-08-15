@@ -1,4 +1,4 @@
-Eco Rail Planner — V0.3.3 Global Beta
+Eco Rail Planner — V0.3.4 Global Beta
 Clean full-project baseline.
 
 IMPORTANT:
@@ -14,4 +14,4 @@ lib/
 Expected search engine occurrences: exactly 1
 lib/search-engine.ts
 
-V0.3.3: 150% car-time ceiling + interactive zoomable Leaflet map.
+V0.3.4: 60% maximum car-distance share + 150% car-time ceiling + last-mile distance + interactive Leaflet map.

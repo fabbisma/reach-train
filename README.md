@@ -151,3 +151,11 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
 - En mode « Arriver avant », les départs de la veille sont conservés comme secours ; si aucun départ le jour demandé n'est trouvé à l'heure cible, l'app teste ensuite +1 h puis +2 h avant d'afficher la veille.
 - Le statut des résultats indique le nombre maximal de correspondances réellement nécessaire pour le palier retenu.
 - Transitous ne relance plus une requête direct-only supplémentaire dans chaque gare : le moteur global gère désormais cette progression.
+
+## V0.2.2 — recherche directe longue distance
+
+- Le palier `0 correspondance` ne se limite plus à la préférence de conduite.
+- L'app teste aussi un petit groupe de grands hubs situés sur un corridor raisonnable, jusqu'à 6 h de conduite, uniquement pour rechercher un train direct.
+- Ajout de Freiburg (Breisgau) Hbf, Zürich HB, Karlsruhe Hbf et Mannheim Hbf à la base de hubs, en plus de Belfort, Mulhouse, Strasbourg et Bâle.
+- La recommandation ferroviaire choisit désormais, parmi le nombre minimal de correspondances trouvé, la gare la plus proche en voiture.
+- Les paliers avec 1, 2 ou 3 correspondances conservent la liste compacte afin de limiter le temps de calcul.

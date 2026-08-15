@@ -35,10 +35,18 @@ function fmtDuration(minutes: number) {
 
 const labelText = {
   closestDrive: "🚗 Gare la plus proche",
-  mostDirectRail: "🚆 Train le plus direct",
   bestCompromise: "⚖️ Meilleur compromis",
   bestArrivalFit: "🎯 Arrivée la plus proche"
 } as const;
+
+function recommendationLabel(label: SearchResponse["options"][number]["labels"][number], option: SearchResponse["options"][number]) {
+  if (label === "mostDirectRail") {
+    return option.rail.changes === 0
+      ? "🚆 Direct · gare la plus proche"
+      : `🚆 Le plus direct · ${option.rail.changes} correspondance${option.rail.changes > 1 ? "s" : ""}`;
+  }
+  return labelText[label];
+}
 
 export default function SearchForm() {
   const [form, setForm] = useState<SearchRequest>({
@@ -128,7 +136,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.1 : les correspondances sont automatiques. L’app cherche d’abord en direct, puis 1, 2 ou 3 correspondances seulement si nécessaire, avant d’élargir l’horaire.</p>
+        <p className="form-hint">V0.2.2 : l’app cherche d’abord les directs, y compris depuis de grands hubs éloignés, puis 1, 2 ou 3 correspondances seulement si nécessaire.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -163,7 +171,7 @@ export default function SearchForm() {
               {result.options.map((option) => (
                 <article className="option-card" key={option.id}>
                   <div className="badges">
-                    {option.labels.map((label) => <span key={label}>{labelText[label]}</span>)}
+                    {option.labels.map((label) => <span key={label}>{recommendationLabel(label, option)}</span>)}
                   </div>
                   <h3>{option.station.name}</h3>
                   {option.warnings.length > 0 && (

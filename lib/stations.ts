@@ -13,7 +13,11 @@ export const STATIONS: Station[] = [
   { id: "fr-belfort-tgv", name: "Belfort-Montbéliard TGV", lat: 47.5861, lng: 6.8971, importance: 0.86 },
   { id: "fr-mulhouse", name: "Mulhouse-Ville", lat: 47.7418, lng: 7.3430, importance: 0.88 },
   { id: "fr-strasbourg", name: "Strasbourg", lat: 48.5850, lng: 7.7346, importance: 0.98 },
-  { id: "ch-basel-sbb", name: "Bâle SBB", lat: 47.5476, lng: 7.5896, importance: 0.95 }
+  { id: "ch-basel-sbb", name: "Bâle SBB", lat: 47.5476, lng: 7.5896, importance: 0.95 },
+  { id: "de-freiburg-hbf", name: "Freiburg (Breisgau) Hbf", lat: 47.9978, lng: 7.8421, importance: 0.94 },
+  { id: "ch-zurich-hb", name: "Zürich HB", lat: 47.3782, lng: 8.5402, importance: 1.0 },
+  { id: "de-karlsruhe-hbf", name: "Karlsruhe Hbf", lat: 48.9935, lng: 8.4005, importance: 0.97 },
+  { id: "de-mannheim-hbf", name: "Mannheim Hbf", lat: 49.4794, lng: 8.4691, importance: 0.99 }
 ];
 
 const KNOWN_PLACES: Record<string, Place> = {

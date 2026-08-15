@@ -9,6 +9,8 @@ import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/
 
 const STATION_BUFFER_MINUTES = 22;
 const COMFORT_EXTRA_MINUTES = 10;
+const MAX_DIRECT_HUB_DRIVE_MINUTES = 360;
+const MAX_DIRECT_HUBS = 10;
 
 function transitousContact() {
   if (process.env.TRANSITOUS_CONTACT) return process.env.TRANSITOUS_CONTACT;
@@ -142,6 +144,59 @@ function candidateStations(
   return [...selected.values()];
 }
 
+/**
+ * Les trajets directs méritent une recherche séparée : une gare située bien
+ * au-delà de la préférence voiture peut ouvrir un ICE/TGV direct beaucoup
+ * plus rapide. On garde donc quelques grands hubs sur le corridor, jusqu'à
+ * 6 h de route maximum, sans les laisser polluer les recherches avec
+ * correspondances.
+ */
+function directHubCandidates(
+  origin: { lat: number; lng: number },
+  destination: { lat: number; lng: number },
+  maxDriveMinutes: number
+): StationCandidate[] {
+  const direct = haversineKm(origin, destination);
+
+  return STATIONS
+    .map((station) => {
+      const originKm = haversineKm(origin, station);
+      const stationToDest = haversineKm(station, destination);
+      const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
+      const driveEstimate = (originKm / 75) * 60 + 8;
+      return { station, originKm, detourRatio, driveEstimate };
+    })
+    .filter((item) =>
+      item.station.importance >= 0.84 &&
+      item.driveEstimate > maxDriveMinutes + 20 &&
+      item.driveEstimate <= MAX_DIRECT_HUB_DRIVE_MINUTES &&
+      item.detourRatio <= 1.65
+    )
+    // Les hubs déjà très proches restent dans la recherche normale. Ici on
+    // privilégie les portes d'entrée longue distance : Belfort, Mulhouse,
+    // Bâle, Freiburg, Strasbourg, Zürich, Karlsruhe, Mannheim, etc.
+    .sort((a, b) => a.driveEstimate - b.driveEstimate || b.station.importance - a.station.importance)
+    .slice(0, MAX_DIRECT_HUBS)
+    .map((item) => ({
+      station: item.station,
+      strategicException: item.driveEstimate > maxDriveMinutes,
+      allowedDriveMinutes: MAX_DIRECT_HUB_DRIVE_MINUTES
+    }));
+}
+
+function mergeCandidates(...groups: StationCandidate[][]): StationCandidate[] {
+  const merged = new Map<string, StationCandidate>();
+  for (const group of groups) {
+    for (const candidate of group) {
+      const existing = merged.get(candidate.station.id);
+      if (!existing || candidate.allowedDriveMinutes > existing.allowedDriveMinutes) {
+        merged.set(candidate.station.id, candidate);
+      }
+    }
+  }
+  return [...merged.values()];
+}
+
 function estimateImpact(params: { carKm: number; railKm: number; directCarKm: number; vehicleType: SearchRequest["vehicleType"] }) {
   const carCo2PerKm = params.vehicleType === "electric" ? 0.055 : 0.19;
   const carCostPerKm = params.vehicleType === "electric" ? 0.105 : 0.155;
@@ -232,8 +287,12 @@ function summarizeOptions(options: JourneyOption[], request: SearchRequest) {
     a.totalMinutes - b.totalMinutes
   )[0];
 
+  // Pour la catégorie « direct », on cherche d'abord le nombre minimal de
+  // changements, puis la gare la plus proche en voiture. Si un direct existe,
+  // c'est donc bien le direct accessible avec le moins de conduite.
   const mostDirectRail = [...options].sort((a, b) =>
     a.rail.changes - b.rail.changes ||
+    a.drive.durationMinutes - b.drive.durationMinutes ||
     a.rail.durationMinutes - b.rail.durationMinutes ||
     a.totalMinutes - b.totalMinutes
   )[0];
@@ -494,6 +553,7 @@ type ProgressiveResult = {
 
 async function progressiveTransferSearch(params: {
   candidates: StationCandidate[];
+  directCandidates: StationCandidate[];
   request: SearchRequest;
   origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
   destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
@@ -511,8 +571,15 @@ async function progressiveTransferSearch(params: {
   // On stoppe dès qu'un niveau donne des solutions le jour demandé :
   // direct d'abord, puis 1, 2 et 3 correspondances seulement si nécessaire.
   for (let maxTransfers = 0; maxTransfers <= MAX_AUTO_TRANSFERS; maxTransfers += 1) {
+    // Au niveau direct uniquement, on élargit volontairement à des hubs très
+    // éloignés. Aux niveaux 1/2/3 correspondances, on revient à la liste
+    // compacte pour conserver de bonnes performances.
+    const levelCandidates = maxTransfers === 0
+      ? mergeCandidates(params.candidates, params.directCandidates)
+      : params.candidates;
+
     const batch = await evaluateCandidates({
-      candidates: params.candidates,
+      candidates: levelCandidates,
       request: params.request,
       origin: params.origin,
       destination: params.destination,
@@ -585,6 +652,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   // Une seule liste de gares pour tout le calcul. Elle contient les gares proches
   // et quelques grands hubs jusqu'à +2 h de conduite, signalés comme compromis.
   const candidates = candidateStations(origin, destination, request.maxDriveMinutes, international, true);
+  const directCandidates = directHubCandidates(origin, destination, request.maxDriveMinutes);
 
   let options: JourneyOption[] = [];
   let usedMaxTransfers = 0;
@@ -598,6 +666,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
   if (request.mode === "arriveBy") {
     const initial = await progressiveTransferSearch({
       candidates,
+      directCandidates,
       request,
       origin,
       destination,
@@ -626,6 +695,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
         const shiftedTarget = addMinutes(originalTargetIso, shiftMinutes);
         const later = await progressiveTransferSearch({
           candidates,
+          directCandidates,
           request,
           origin,
           destination,
@@ -668,8 +738,9 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     // En mode départ, même logique automatique : direct puis davantage de
     // correspondances uniquement si aucun trajet n'est trouvé.
     for (let maxTransfers = 0; maxTransfers <= MAX_AUTO_TRANSFERS; maxTransfers += 1) {
+      const levelCandidates = maxTransfers === 0 ? mergeCandidates(candidates, directCandidates) : candidates;
       const batch = await evaluateCandidates({
-        candidates,
+        candidates: levelCandidates,
         request,
         origin,
         destination,
@@ -705,8 +776,9 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${uniqueFailures.join(", ")}.`);
   }
   notes.push(`Correspondances automatiques : le moteur s'est arrêté à ${usedMaxTransfers} correspondance${usedMaxTransfers > 1 ? "s" : ""} maximum.`);
+  notes.push(`Recherche directe élargie : ${directCandidates.length} grands hubs sont vérifiés même au-delà de la préférence voiture (jusqu'à ${compactDuration(MAX_DIRECT_HUB_DRIVE_MINUTES)}).`);
   if (request.mode === "arriveBy") {
-    notes.push("Ordre de recherche : heure demandée en direct → 1 → 2 → 3 correspondances ; la veille est gardée en secours ; puis +1 h et +2 h sont testés pour préserver un départ le jour même.");
+    notes.push("Ordre de recherche : direct sur gares proches + grands hubs longue distance → 1 → 2 → 3 correspondances sur la liste compacte ; la veille est gardée en secours ; puis +1 h et +2 h sont testés pour préserver un départ le jour même.");
     notes.push("Synthèse affichée : gare la plus proche, train le plus direct, meilleur compromis et arrivée la plus proche de l’heure demandée parmi les trajets trouvés.");
   } else {
     notes.push("Synthèse affichée : gare la plus proche, train le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");

@@ -320,15 +320,29 @@ async function evaluateStation(params: {
 
 type RecommendationLabel = JourneyOption["labels"][number];
 
-function recommendationClone(option: JourneyOption, label: RecommendationLabel, request: SearchRequest) {
-  const clone: JourneyOption = {
+function mergeRecommendation(
+  result: JourneyOption[],
+  option: JourneyOption,
+  label: RecommendationLabel,
+  request: SearchRequest
+) {
+  // Une même gare peut gagner plusieurs critères. On garde une seule carte
+  // par gare et par jour, puis on cumule simplement les badges.
+  const existing = result.find((item) => item.station.id === option.station.id);
+  if (existing) {
+    if (!existing.labels.includes(label)) existing.labels.push(label);
+    existing.warnings = warningsFor(existing, request);
+    return;
+  }
+
+  const merged: JourneyOption = {
     ...option,
-    id: `${option.id}-${label}`,
+    id: `${option.id}-summary`,
     labels: [label],
     warnings: []
   };
-  clone.warnings = warningsFor(clone, request);
-  return clone;
+  merged.warnings = warningsFor(merged, request);
+  result.push(merged);
 }
 
 function summarizeDay(options: JourneyOption[], request: SearchRequest) {
@@ -341,7 +355,7 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
     a.drive.distanceKm - b.drive.distanceKm ||
     a.totalMinutes - b.totalMinutes
   )[0];
-  result.push(recommendationClone(closest, "closestStation", request));
+  mergeRecommendation(result, closest, "closestStation", request);
 
   const withinLimit = options.filter((option) => option.drive.durationMinutes <= request.maxDriveMinutes);
   if (withinLimit.length) {
@@ -350,7 +364,7 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
       a.rail.changes - b.rail.changes ||
       a.totalMinutes - b.totalMinutes
     )[0];
-    result.push(recommendationClone(fastestRailWithin, "fastestRailWithinLimit", request));
+    mergeRecommendation(result, fastestRailWithin, "fastestRailWithinLimit", request);
   }
 
   const extended = options.filter((option) => option.drive.durationMinutes > request.maxDriveMinutes);
@@ -360,7 +374,7 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
       a.rail.changes - b.rail.changes ||
       a.drive.durationMinutes - b.drive.durationMinutes
     )[0];
-    result.push(recommendationClone(fastestRailExtended, "fastestRailExtended", request));
+    mergeRecommendation(result, fastestRailExtended, "fastestRailExtended", request);
   }
 
   const fastestTotal = [...options].sort((a, b) =>
@@ -368,7 +382,7 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
     a.rail.changes - b.rail.changes ||
     a.drive.durationMinutes - b.drive.durationMinutes
   )[0];
-  result.push(recommendationClone(fastestTotal, "fastestTotal", request));
+  mergeRecommendation(result, fastestTotal, "fastestTotal", request);
 
   return result;
 }

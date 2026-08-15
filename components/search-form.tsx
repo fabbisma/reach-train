@@ -129,7 +129,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.2.4 : 4 critères indépendants sont comparés pour le jour J et la veille. Le nombre de correspondances est géré automatiquement (jusqu’à 3).</p>
+        <p className="form-hint">V0.2.5 : 4 critères indépendants sont comparés pour le jour J et la veille. Une gare gagnant plusieurs critères n’apparaît qu’une fois avec plusieurs badges.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}

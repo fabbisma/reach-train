@@ -179,3 +179,10 @@ La synthèse ne fusionne plus les catégories. Pour chaque jour de départ dispo
 4. **Trajet total le plus court** : minimum porte-à-porte voiture + marge gare + train.
 
 Le nombre de correspondances n'est plus un filtre utilisateur : jusqu'à 3 sont autorisées automatiquement, puis les critères ci-dessus décident quelles options afficher. Les correspondances et leurs temps de transit restent détaillés sur chaque carte.
+
+
+## V0.2.5 — dédoublonnage des synthèses
+
+- Une gare n’est affichée qu’une seule fois par section (Jour J / Veille).
+- Si elle gagne plusieurs critères, les badges sont cumulés sur la même carte.
+- Les quatre critères restent calculés indépendamment ; seul l’affichage est dédoublonné.

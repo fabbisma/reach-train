@@ -139,10 +139,61 @@ function pareto(options: JourneyOption[]) {
   }));
 }
 
-function summarizeOptions(options: JourneyOption[]) {
+function compactDuration(minutes: number) {
+  const safe = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safe / 60);
+  const rest = safe % 60;
+  if (!hours) return `${rest} min`;
+  if (!rest) return `${hours} h`;
+  return `${hours} h ${String(rest).padStart(2, "0")}`;
+}
+
+function parisDateKey(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(iso));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function warningsFor(option: JourneyOption, request: SearchRequest) {
+  const warnings: string[] = [];
+
+  if (parisDateKey(option.recommendedDepartureAt) < request.date) {
+    warnings.push("Partir la veille");
+  }
+
+  if (option.driveLimitExceededBy > 0) {
+    warnings.push(`Voiture +${compactDuration(option.driveLimitExceededBy)} vs limite`);
+  }
+
+  const transferDurations = option.rail.transfers?.map((transfer) => transfer.durationMinutes) ?? [];
+  if (transferDurations.length) {
+    const longest = Math.max(...transferDurations);
+    const shortest = Math.min(...transferDurations);
+    if (longest >= 45) warnings.push(`Transit long · ${compactDuration(longest)}`);
+    else if (shortest <= 9) warnings.push(`Transit serré · ${compactDuration(shortest)}`);
+  }
+
+  if (request.mode === "arriveBy") {
+    const target = zonedLocalToIso(request.date, request.time);
+    const earlyBy = Math.max(0, minutesBetween(option.destinationArrivalAt, target));
+    if (earlyBy >= 90) warnings.push(`Arrivée ${compactDuration(earlyBy)} en avance`);
+  }
+
+  return warnings.slice(0, 3);
+}
+
+function summarizeOptions(options: JourneyOption[], request: SearchRequest) {
   if (!options.length) return options;
 
-  for (const option of options) option.labels = [];
+  for (const option of options) {
+    option.labels = [];
+    option.warnings = warningsFor(option, request);
+  }
 
   const closestDrive = [...options].sort((a, b) =>
     a.drive.durationMinutes - b.drive.durationMinutes ||
@@ -156,10 +207,9 @@ function summarizeOptions(options: JourneyOption[]) {
     a.totalMinutes - b.totalMinutes
   )[0];
 
-  // Compromis lisible entre deux objectifs : rejoindre une gare sans trop
-  // conduire ET garder un trajet ferroviaire rapide. Le temps de train inclut
-  // déjà l'attente pendant les correspondances ; on ajoute une petite pénalité
-  // de confort de 15 min par changement pour favoriser un direct ou un transit court.
+  // Compromis lisible entre rejoindre une gare sans trop conduire et garder
+  // un trajet ferroviaire rapide. Chaque correspondance ajoute une petite
+  // pénalité de confort, mais un transit court peut rester gagnant.
   const minDrive = Math.min(...options.map((option) => option.drive.durationMinutes));
   const maxDrive = Math.max(...options.map((option) => option.drive.durationMinutes));
   const minRail = Math.min(...options.map((option) => option.rail.durationMinutes));
@@ -180,17 +230,40 @@ function summarizeOptions(options: JourneyOption[]) {
     return scoreA - scoreB || a.totalMinutes - b.totalMinutes;
   })[0];
 
+  // En mode "arriver avant", on ajoute une sélection qui vise l'heure demandée
+  // sans accepter un trajet globalement mauvais. Un trajet reste "intéressant"
+  // s'il ne dépasse pas le plus rapide de plus de 12 %, avec au moins 30 min
+  // de marge de tolérance sur les longs trajets.
+  let bestArrivalFit: JourneyOption | undefined;
+  if (request.mode === "arriveBy") {
+    const targetMs = new Date(zonedLocalToIso(request.date, request.time)).getTime();
+    const fastestTotal = Math.min(...options.map((option) => option.totalMinutes));
+    const tolerance = Math.max(30, Math.round(fastestTotal * 0.12));
+    const interesting = options.filter((option) => option.totalMinutes <= fastestTotal + tolerance);
+
+    bestArrivalFit = [...interesting].sort((a, b) => {
+      const gapA = Math.max(0, targetMs - new Date(a.destinationArrivalAt).getTime());
+      const gapB = Math.max(0, targetMs - new Date(b.destinationArrivalAt).getTime());
+      return gapA - gapB || a.totalMinutes - b.totalMinutes || a.rail.changes - b.rail.changes;
+    })[0];
+  }
+
   closestDrive.labels.push("closestDrive");
   if (!mostDirectRail.labels.includes("mostDirectRail")) mostDirectRail.labels.push("mostDirectRail");
   if (!bestCompromise.labels.includes("bestCompromise")) bestCompromise.labels.push("bestCompromise");
+  if (bestArrivalFit && !bestArrivalFit.labels.includes("bestArrivalFit")) bestArrivalFit.labels.push("bestArrivalFit");
 
   // Une même gare peut gagner plusieurs catégories ; on conserve une seule carte.
   const selected = new Map<string, JourneyOption>();
-  for (const option of [closestDrive, mostDirectRail, bestCompromise]) selected.set(option.id, option);
+  for (const option of [closestDrive, mostDirectRail, bestCompromise, bestArrivalFit]) {
+    if (option) selected.set(option.id, option);
+  }
 
   return [...selected.values()].sort((a, b) => {
     const order = (x: JourneyOption) =>
-      x.labels.includes("closestDrive") ? 0 : x.labels.includes("mostDirectRail") ? 1 : 2;
+      x.labels.includes("closestDrive") ? 0 :
+      x.labels.includes("mostDirectRail") ? 1 :
+      x.labels.includes("bestCompromise") ? 2 : 3;
     return order(a) - order(b);
   });
 }
@@ -245,7 +318,8 @@ async function buildOption(params: {
       ...impact,
       isStrategicException: driveLimitExceededBy > 0,
       driveLimitExceededBy,
-      labels: []
+      labels: [],
+      warnings: []
     };
   }
 
@@ -273,7 +347,8 @@ async function buildOption(params: {
     ...impact,
     isStrategicException: driveLimitExceededBy > 0,
     driveLimitExceededBy,
-    labels: []
+    labels: [],
+    warnings: []
   };
 }
 
@@ -324,7 +399,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     notes.push(`${failures.length} recherche(s) de gare ont échoué côté API et ont été ignorées : ${failures.join(", ")}.`);
   }
   notes.push(request.maxTransfers === 0 ? "Filtre actif : trajet ferroviaire direct uniquement." : `Filtre actif : ${request.maxTransfers} correspondance${request.maxTransfers > 1 ? "s" : ""} maximum.`);
-  notes.push("Synthèse affichée : gare la plus proche en voiture, trajet ferroviaire le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");
+  notes.push(request.mode === "arriveBy" ? "Synthèse affichée : gare la plus proche, train le plus direct, meilleur compromis et arrivée la plus proche de l’heure demandée parmi les trajets restant compétitifs." : "Synthèse affichée : gare la plus proche, train le plus direct et meilleur compromis entre temps de voiture, temps de train et nombre de correspondances.");
   notes.push("Les coûts et le CO₂ restent des estimations dans cette version.");
 
   return {
@@ -332,7 +407,7 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     request,
     origin,
     destination,
-    options: summarizeOptions(options),
+    options: summarizeOptions(options, request),
     viableStationCount: options.length,
     paretoStationCount: paretoOptions.length,
     providers: {

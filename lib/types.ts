@@ -72,7 +72,8 @@ export type JourneyOption = {
   isStrategicException: boolean;
   driveLimitExceededBy: number;
   score?: number;
-  labels: Array<"closestDrive" | "mostDirectRail" | "bestCompromise">;
+  labels: Array<"closestDrive" | "mostDirectRail" | "bestCompromise" | "bestArrivalFit">;
+  warnings: string[];
 };
 
 export type ProviderStatus = {

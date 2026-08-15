@@ -121,3 +121,11 @@ Pour les trajets internationaux, `maxDriveMinutes` est traité comme une préfé
   - durée de transit ;
   - services avant/après lorsqu'ils sont fournis par l'API.
 - Une correspondance entre deux gares différentes est signalée sous la forme `Gare A → Gare B`.
+
+
+## V0.1.9 — date, arrivée cible et points d’attention
+
+- Affiche la date complète avec l’heure pour le départ voiture, le train, les correspondances et l’arrivée.
+- En mode **Arriver avant**, ajoute **🎯 Arrivée la plus proche** : parmi les trajets dont le temps total reste compétitif (au plus +12 % ou +30 min par rapport au meilleur), choisit celui qui arrive le plus près de l’heure demandée.
+- Ajoute des remarques d’inconvénient sur les cartes : **Partir la veille**, **Transit long**, **Transit serré**, **Voiture au-dessus de la limite**, **Arrivée très en avance**.
+- Une même proposition peut cumuler plusieurs badges de recommandation sans être affichée deux fois.

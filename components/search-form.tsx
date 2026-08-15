@@ -16,6 +16,17 @@ function fmtTime(iso: string) {
   return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(iso));
 }
 
+function fmtDateTime(iso: string) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Paris"
+  }).format(new Date(iso));
+}
+
 function fmtDuration(minutes: number) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -25,7 +36,8 @@ function fmtDuration(minutes: number) {
 const labelText = {
   closestDrive: "🚗 Gare la plus proche",
   mostDirectRail: "🚆 Train le plus direct",
-  bestCompromise: "⚖️ Meilleur compromis"
+  bestCompromise: "⚖️ Meilleur compromis",
+  bestArrivalFit: "🎯 Arrivée la plus proche"
 } as const;
 
 export default function SearchForm() {
@@ -126,7 +138,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading}>{loading ? "Recherche des gares…" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.1.8 : l’app synthétise 3 choix : gare la plus proche, train le plus direct et meilleur compromis voiture + train. Les correspondances sont détaillées avec leur temps de transit.</p>
+        <p className="form-hint">V0.1.9 : en mode “Arriver avant”, l’app ajoute une sélection qui arrive au plus près de l’heure demandée sans dégrader fortement le temps total. Les dates et les inconvénients sont affichés clairement.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -157,23 +169,25 @@ export default function SearchForm() {
                     {option.labels.map((label) => <span key={label}>{labelText[label]}</span>)}
                   </div>
                   <h3>{option.station.name}</h3>
-                  {option.isStrategicException && (
-                    <p className="strategic-warning">⭐ Hub stratégique · +{fmtDuration(option.driveLimitExceededBy)} au-delà de votre préférence</p>
+                  {option.warnings.length > 0 && (
+                    <div className="tradeoffs" aria-label="Points d’attention">
+                      {option.warnings.map((warning) => <span key={warning}>⚠️ {warning}</span>)}
+                    </div>
                   )}
-                  <p className="leave-time">Départ conseillé <strong>{fmtTime(option.recommendedDepartureAt)}</strong></p>
-                  {form.mode === "arriveBy" && <p className="comfort">Confortable : {fmtTime(option.comfortableDepartureAt)} · limite : {fmtTime(option.latestDepartureAt)}</p>}
+                  <p className="leave-time">Départ conseillé <strong>{fmtDateTime(option.recommendedDepartureAt)}</strong></p>
+                  {result.request.mode === "arriveBy" && <p className="comfort">Confortable : {fmtDateTime(option.comfortableDepartureAt)} · limite : {fmtDateTime(option.latestDepartureAt)}</p>}
 
                   <div className="timeline">
-                    <div><span>🚗</span><p><b>{fmtTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
-                    <div><span>🅿️</span><p><b>{fmtTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
-                    <div><span>🚆</span><p><b>{fmtTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
+                    <div><span>🚗</span><p><b>{fmtDateTime(option.recommendedDepartureAt)}</b> départ<br/><small>{fmtDuration(option.drive.durationMinutes)} · {option.drive.distanceKm} km</small></p></div>
+                    <div><span>🅿️</span><p><b>{fmtDateTime(option.stationArrivalAt)}</b> gare<br/><small>{option.bufferMinutes} min de marge</small></p></div>
+                    <div><span>🚆</span><p><b>{fmtDateTime(option.trainDepartureAt)}</b> train<br/><small>{fmtDuration(option.rail.durationMinutes)} · {option.rail.changes} changement{option.rail.changes > 1 ? "s" : ""}{option.rail.realtime ? " · temps réel" : ""}</small>
                       {option.rail.services?.length ? <small className="services">{option.rail.services.join(" · ")}</small> : null}</p></div>
                     {option.rail.transfers?.map((transfer, index) => (
                       <div className="transfer-step" key={`${transfer.stationName}-${transfer.arrivalAt}-${index}`}>
                         <span>🔁</span>
                         <p>
                           <b>{transfer.stationName}</b><br/>
-                          <small>Arrivée {fmtTime(transfer.arrivalAt)} · départ suivant {fmtTime(transfer.departureAt)}</small>
+                          <small>Arrivée {fmtDateTime(transfer.arrivalAt)} · départ suivant {fmtDateTime(transfer.departureAt)}</small>
                           <strong className="transfer-duration">Transit : {fmtDuration(transfer.durationMinutes)}</strong>
                           {(transfer.fromService || transfer.toService) && (
                             <small className="services">{transfer.fromService ?? "Train précédent"} → {transfer.toService ?? "Train suivant"}</small>
@@ -181,7 +195,7 @@ export default function SearchForm() {
                         </p>
                       </div>
                     ))}
-                    <div><span>📍</span><p><b>{fmtTime(option.destinationArrivalAt)}</b> arrivée</p></div>
+                    <div><span>📍</span><p><b>{fmtDateTime(option.destinationArrivalAt)}</b> arrivée</p></div>
                   </div>
 
                   <div className="metrics">

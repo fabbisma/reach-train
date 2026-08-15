@@ -95,3 +95,23 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
 .transfer-step p { width: 100%; }
 .transfer-step { margin-top: 2px !important; margin-bottom: 15px !important; }
 .transfer-duration { display: block; margin-top: 4px; color: var(--blue); font-size: 12px; }
+
+.tradeoffs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.tradeoffs span {
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: #fff3dc;
+  color: #845313;
+  border: 1px solid #f2d49c;
+}
+.leave-time strong {
+  display: inline-block;
+  margin-left: 4px;
+}

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import RailMap from "@/components/rail-map";
 import type { JourneyOption, LocationSuggestion, Place, RecommendationBadge, SearchRequest, SearchResponse } from "@/lib/types";
 
-function tomorrowLocal() {
+function defaultArrivalDate() {
   const d = new Date();
-  d.setDate(d.getDate() + 1);
+  d.setDate(d.getDate() + 2);
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -292,8 +292,8 @@ export default function SearchForm() {
   const [form, setForm] = useState<SearchRequest>({
     origin: "",
     destination: "",
-    date: tomorrowLocal(),
-    time: "10:30",
+    date: defaultArrivalDate(),
+    time: "12:00",
     mode: "arriveBy",
     maxDriveMinutes: 90
   });
@@ -376,7 +376,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.5.2 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
+        <p className="form-hint">V0.3.5.3 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -392,7 +392,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.5.2 Global Beta</span>
+            <span>🌍 V0.3.5.3 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>

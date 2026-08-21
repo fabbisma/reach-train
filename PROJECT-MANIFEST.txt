@@ -1,4 +1,4 @@
-Eco Rail Planner — V0.3.5.2 Global Beta
+Eco Rail Planner — V0.3.5.3 Global Beta
 Clean full-project baseline.
 
 IMPORTANT:
@@ -14,7 +14,7 @@ lib/
 Expected search engine occurrences: exactly 1
 lib/search-engine.ts
 
-V0.3.5.2:
+V0.3.5.3:
 - Correctif Google Places Autocomplete (New): suppression du champ invalide placePrediction.primaryType du field mask.
 - Le fallback Transitous est maintenant signalé explicitement dans la liste de suggestions.
 
@@ -24,6 +24,6 @@ V0.3.5.2:
 - Generic car profile used only for rough cost/CO2 estimates.
 - Existing 60% car-distance and 150% car-time guards preserved.
 
-V0.3.5.2 build safety:
+V0.3.5.3 build safety:
 - tsconfig compile scope limited to app/, components/, lib/ and Next type files
 - obsolete root-level .ts/.tsx leftovers from old hotfixes can no longer break TypeScript build

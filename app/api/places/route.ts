@@ -47,13 +47,17 @@ export async function GET(request: Request) {
       return Response.json({ suggestion: resolved, provider: "google" });
     }
 
-    if (q.length < 3) return Response.json({ suggestions: [], provider: googleKey ? "google" : "transitous" });
+    if (q.length < 3) return Response.json({
+      suggestions: [],
+      provider: googleKey ? "google" : "transitous",
+      fallback: !googleKey
+    });
 
     if (googleKey) {
       try {
         const google = new GooglePlacesProvider(googleKey);
         const suggestions = await google.searchPlaces(q, 7, sessionToken);
-        return Response.json({ suggestions, provider: "google" });
+        return Response.json({ suggestions, provider: "google", fallback: false });
       } catch (error) {
         console.error("Google Places autocomplete failed, fallback Transitous:", error);
       }
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
 
     const transitous = new TransitousLocationProvider(transitousContact());
     const suggestions = (await transitous.searchPlaces(q, 7)).map((item) => ({ ...item, provider: "transitous" as const }));
-    return Response.json({ suggestions, provider: "transitous" });
+    return Response.json({ suggestions, provider: "transitous", fallback: Boolean(googleKey) });
   } catch (error) {
     console.error("Place autocomplete failed:", error);
     return Response.json({ suggestions: [], error: "La recherche d'adresse a échoué." }, { status: 500 });

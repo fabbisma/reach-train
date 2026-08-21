@@ -8,7 +8,6 @@ const AUTOCOMPLETE_FIELD_MASK = [
   "suggestions.placePrediction.text.text",
   "suggestions.placePrediction.structuredFormat.mainText.text",
   "suggestions.placePrediction.structuredFormat.secondaryText.text",
-  "suggestions.placePrediction.primaryType",
   "suggestions.placePrediction.types"
 ].join(",");
 
@@ -27,7 +26,6 @@ type PlacePrediction = {
     mainText?: GoogleText;
     secondaryText?: GoogleText;
   };
-  primaryType?: string;
   types?: string[];
 };
 
@@ -43,7 +41,7 @@ type PlaceDetailsResponse = {
 };
 
 function suggestionType(prediction: PlacePrediction): LocationSuggestion["type"] {
-  const types = new Set([prediction.primaryType, ...(prediction.types ?? [])].filter(Boolean));
+  const types = new Set(prediction.types ?? []);
   if (
     types.has("train_station") ||
     types.has("transit_station") ||

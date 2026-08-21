@@ -163,6 +163,7 @@ function LocationField({
   const [resolving, setResolving] = useState(false);
   const [open, setOpen] = useState(false);
   const [provider, setProvider] = useState<"google" | "transitous" | undefined>();
+  const [fallback, setFallback] = useState(false);
   const [sessionToken, setSessionToken] = useState("");
 
   useEffect(() => {
@@ -187,9 +188,11 @@ function LocationField({
         const data = (await response.json()) as {
           suggestions?: LocationSuggestion[];
           provider?: "google" | "transitous";
+          fallback?: boolean;
         };
         setSuggestions(data.suggestions ?? []);
         setProvider(data.provider);
+        setFallback(Boolean(data.fallback));
         setOpen(true);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) setSuggestions([]);
@@ -274,6 +277,7 @@ function LocationField({
               <div className="location-suggestion muted">Aucune suggestion. Essaie avec la ville, le code postal ou le pays.</div>
             )}
             {provider === "google" && <div className="places-attribution">Suggestions fournies par Google Maps</div>}
+            {provider === "transitous" && fallback && <div className="places-attribution">⚠️ Google Places indisponible · suggestions de secours Transitous</div>}
           </div>
         )}
       </div>
@@ -372,7 +376,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.5.1 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
+        <p className="form-hint">V0.3.5.2 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -388,7 +392,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.5.1 Global Beta</span>
+            <span>🌍 V0.3.5.2 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>

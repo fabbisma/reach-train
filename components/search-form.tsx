@@ -372,7 +372,7 @@ export default function SearchForm() {
         </div>
 
         <button className="primary" disabled={loading || !form.originPlace || !form.destinationPlace}>{loading ? "Recherche des gares…" : !form.originPlace || !form.destinationPlace ? "Confirme le départ et la destination" : "Trouver le meilleur trajet"}</button>
-        <p className="form-hint">V0.3.5 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
+        <p className="form-hint">V0.3.5.1 Global Beta : adresses via Google Places, voiture limitée à 60 % des km, plafond à 150 % du temps voiture et carte zoomable.</p>
       </form>
 
       {error && <div className="error-box">{error}</div>}
@@ -388,7 +388,7 @@ export default function SearchForm() {
           </div>
 
           <div className="provider-status">
-            <span>🌍 V0.3.5 Global Beta</span>
+            <span>🌍 V0.3.5.1 Global Beta</span>
             <span>{result.providers.road.live ? "✅" : "🧪"} 🚗 {result.providers.road.name}</span>
             <span>{result.providers.rail.live ? "✅" : "🧪"} 🚆 {result.providers.rail.name}</span>
             <span>🔀 Jusqu’à {result.usedMaxTransfers} correspondances · automatique</span>

@@ -1,4 +1,4 @@
-# Eco Rail Planner — V0.3.5 Global Beta
+# Eco Rail Planner — V0.3.5.1 Global Beta
 
 Clean full-project baseline rebuilt from the stable V0.2.8.1 UI/map behavior plus the V0.3 dynamic-station engine.
 
@@ -80,7 +80,7 @@ See `.env.example`. Existing Vercel environment variables can be kept.
 - La distance approximative entre le dernier arrêt de transport public et l’adresse finale est affichée.
 - La carte distingue le dernier arrêt et l’adresse finale lorsqu’ils ne coïncident pas.
 
-### V0.3.5
+### V0.3.5.1
 - Autocomplétion départ/destination via Google Places API (New) quand `GOOGLE_PLACES_API_KEY` ou `GOOGLE_MAPS_API_KEY` est configurée.
 - Sélection Google résolue en coordonnées exactes avant le calcul ; Transitous reste utilisé comme fallback et pour enrichir le fuseau horaire.
 - Suppression du choix électrique/thermique : le type de véhicule n’influence plus l’algorithme.

@@ -245,6 +245,7 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   border-top-style: dashed;
 }
 .rail-map-legend .legend-rail { border-top-color: #2b8a5a; }
+.rail-map-legend .legend-last-mile { border-top-color: #6b7280; border-top-style: dashed; }
 
 .rail-map-route {
   padding: 7px 14px 10px;
@@ -265,6 +266,13 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   padding: 3px 6px;
 }
 .rail-map .leaflet-control-attribution { font-size: 8px; }
+
+.rail-map .leaflet-control-zoom a {
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 18px;
+}
 
 .rail-segments {
   padding: 12px 14px 14px;
@@ -343,3 +351,101 @@ input:focus, select:focus { border-color: #79ad8d; box-shadow: 0 0 0 3px #e5f4eb
   .rail-map-head { align-items: flex-start; flex-direction: column; gap: 3px; }
   .rail-map-head span { text-align: left; }
 }
+
+/* V0.3.4 — validation obligatoire des lieux */
+.location-field { position: relative; min-width: 0; }
+.location-field-label { display: block; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 7px; }
+.location-input-wrap { position: relative; }
+.location-input-wrap input { padding-right: 42px; }
+.location-state {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: #f0f4f1;
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+.location-state.confirmed { background: var(--green-soft); color: var(--green-dark); }
+.location-confirmation {
+  display: block;
+  margin-top: 6px;
+  color: #9a6a24;
+  font-size: 10px;
+  font-weight: 700;
+}
+.location-confirmation.confirmed { color: var(--green); }
+.location-suggestions {
+  position: absolute;
+  z-index: 1000;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 18px 45px rgba(22, 47, 32, .16);
+}
+.location-suggestion {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid #edf2ee;
+  padding: 11px 12px;
+  background: white;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.location-suggestion:last-child { border-bottom: 0; }
+button.location-suggestion:hover { background: #f2f8f4; }
+.location-suggestion > span:last-child { min-width: 0; display: block; }
+.location-suggestion strong { display: block; font-size: 12px; line-height: 1.35; }
+.location-suggestion small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+.location-suggestion.muted { color: var(--muted); font-size: 11px; cursor: default; }
+.location-kind { flex: 0 0 auto; font-size: 16px; line-height: 1.2; }
+.primary:disabled { cursor: not-allowed; }
+
+.last-mile-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 14px;
+  margin: 0 14px 14px;
+  padding: 11px 12px;
+  border: 1px solid #ead9be;
+  border-radius: 12px;
+  background: #fffaf1;
+}
+.last-mile-card > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.last-mile-card strong { font-size: 12px; color: #674b21; }
+.last-mile-card span { font-size: 11px; color: var(--muted); }
+.last-mile-distance { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.last-mile-distance b { font-size: 15px; color: #9a5a13; }
+.last-mile-distance small { max-width: 160px; color: var(--muted); font-size: 9px; }
+.last-mile-card p { grid-column: 1 / -1; margin: 2px 0 0; color: var(--muted); font-size: 9px; }
+@media (max-width: 520px) {
+  .last-mile-card { grid-template-columns: 1fr; }
+  .last-mile-distance { align-items: flex-start; text-align: left; }
+}
+
+/* V0.3.5 — attribution de l'autocomplétion Google Places */
+.places-attribution {
+  padding: 7px 12px;
+  border-top: 1px solid var(--line);
+  text-align: right;
+  color: var(--muted);
+  background: #fafcfb;
+  font-size: 9px;
+  font-weight: 700;
+}
+.location-suggestion:disabled { opacity: .65; cursor: wait; }

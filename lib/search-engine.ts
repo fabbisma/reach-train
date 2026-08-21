@@ -2,15 +2,19 @@ import { MockRailProvider, MockRoadProvider } from "@/lib/providers/mock";
 import { GoogleRoutesProvider } from "@/lib/providers/google-routes";
 import { NavitiaRailProvider } from "@/lib/providers/navitia";
 import { TransitousRailProvider } from "@/lib/providers/transitous";
+import { TransitousLocationProvider } from "@/lib/providers/transitous-locations";
 import type { RailProvider, RoadProvider } from "@/lib/providers/types";
 import { resolveKnownPlace, STATIONS } from "@/lib/stations";
-import type { JourneyOption, RailLeg, RecommendationBadge, RecommendationCriterion, SearchRequest, SearchResponse, Station } from "@/lib/types";
+import type { JourneyOption, Place, RailLeg, RecommendationBadge, RecommendationCriterion, RoadLeg, SearchRequest, SearchResponse, Station } from "@/lib/types";
 import { addMinutes, haversineKm, minutesBetween, zonedLocalToIso } from "@/lib/utils";
 
 const STATION_BUFFER_MINUTES = 22;
 const COMFORT_EXTRA_MINUTES = 10;
 const MAX_AUTO_TRANSFERS = 3;
+const MAX_FALLBACK_TRANSFERS = 5;
 const MAX_EXTENDED_DRIVE_MINUTES = 360;
+const MAX_MULTIMODAL_VS_CAR_RATIO = 1.5;
+const MAX_DRIVE_DISTANCE_SHARE = 0.6;
 
 function transitousContact() {
   if (process.env.TRANSITOUS_CONTACT) return process.env.TRANSITOUS_CONTACT;
@@ -29,12 +33,13 @@ function providers(destinationCountry?: string): {
   const googleKey = process.env.GOOGLE_MAPS_API_KEY;
   const navitiaToken = process.env.NAVITIA_TOKEN;
   const contact = transitousContact();
-  const international = Boolean(destinationCountry && destinationCountry !== "FR");
 
   const road = googleKey ? new GoogleRoutesProvider(googleKey) : new MockRoadProvider();
   const roadLive = Boolean(googleKey);
 
-  if (international && contact) {
+  // V0.3 : Transitous/MOTIS devient le moteur ferroviaire principal partout.
+  // Navitia reste uniquement un fallback France si Transitous n'est pas configuré.
+  if (contact) {
     return {
       road,
       rail: new TransitousRailProvider(contact),
@@ -45,7 +50,7 @@ function providers(destinationCountry?: string): {
     };
   }
 
-  if (!international && navitiaToken) {
+  if (destinationCountry === "FR" && navitiaToken) {
     return {
       road,
       rail: new NavitiaRailProvider(navitiaToken),
@@ -79,40 +84,52 @@ type StationCandidate = {
  */
 function analysisCandidates(
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
+  stations: Station[]
 ): StationCandidate[] {
   const direct = haversineKm(origin, destination);
-  const enriched = STATIONS.map((station) => {
+  const enriched = stations.map((station) => {
     const originKm = haversineKm(origin, station);
     const stationToDest = haversineKm(station, destination);
     const detourRatio = (originKm + stationToDest) / Math.max(1, direct);
     const driveEstimate = (originKm / 75) * 60 + 8;
-    return { station, originKm, detourRatio, driveEstimate };
-  });
+    return { station, originKm, stationToDest, detourRatio, driveEstimate };
+  }).filter((item) =>
+    item.driveEstimate <= MAX_EXTENDED_DRIVE_MINUTES + 35 &&
+    (direct < 90 || item.detourRatio <= 1.95)
+  );
 
   const selected = new Map<string, StationCandidate>();
+
+  // Toujours garder les gares ferroviaires les plus proches.
   for (const item of [...enriched].sort((a, b) => a.originKm - b.originKm).slice(0, 6)) {
     selected.set(item.station.id, { station: item.station, allowedDriveMinutes: MAX_EXTENDED_DRIVE_MINUTES });
   }
 
-  for (const item of enriched
-    .filter((x) => x.station.importance >= 0.8 && x.driveEstimate <= MAX_EXTENDED_DRIVE_MINUTES && x.detourRatio <= 1.8)
-    .sort((a, b) => a.driveEstimate - b.driveEstimate || b.station.importance - a.station.importance)
-    .slice(0, 12)) {
+  // Puis ajouter les hubs les plus importants sur un corridor raisonnable.
+  for (const item of [...enriched]
+    .sort((a, b) =>
+      b.station.importance - a.station.importance ||
+      a.detourRatio - b.detourRatio ||
+      a.driveEstimate - b.driveEstimate
+    )
+    .slice(0, 10)) {
     selected.set(item.station.id, { station: item.station, allowedDriveMinutes: MAX_EXTENDED_DRIVE_MINUTES });
+    if (selected.size >= 12) break;
   }
 
-  return [...selected.values()];
+  return [...selected.values()].slice(0, 12);
 }
 
 function estimateImpact(params: {
   carKm: number;
   railKm: number;
   directCarKm: number;
-  vehicleType: SearchRequest["vehicleType"];
 }) {
-  const carCo2PerKm = params.vehicleType === "electric" ? 0.055 : 0.19;
-  const carCostPerKm = params.vehicleType === "electric" ? 0.105 : 0.155;
+  // Profil voiture générique : le type de véhicule n'influence plus le choix
+  // d'itinéraire. Ces chiffres restent de simples ordres de grandeur.
+  const carCo2PerKm = 0.13;
+  const carCostPerKm = 0.13;
   const trainCo2PerKm = 0.006;
   const trainCostPerKm = 0.11;
   return {
@@ -131,9 +148,9 @@ function compactDuration(minutes: number) {
   return `${hours} h ${String(rest).padStart(2, "0")}`;
 }
 
-function parisDateKey(iso: string) {
+function localDateKey(iso: string, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Paris",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
@@ -142,12 +159,12 @@ function parisDateKey(iso: string) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function previousDateKey(request: SearchRequest) {
-  const noon = zonedLocalToIso(request.date, "12:00");
-  return parisDateKey(addMinutes(noon, -24 * 60));
+function previousDateKey(request: SearchRequest, timeZone: string) {
+  const noon = zonedLocalToIso(request.date, "12:00", timeZone);
+  return localDateKey(addMinutes(noon, -24 * 60), timeZone);
 }
 
-function warningsFor(option: JourneyOption, request: SearchRequest) {
+function warningsFor(option: JourneyOption, request: SearchRequest, targetTimeZone: string) {
   const warnings: string[] = [];
 
   if (option.departureDay === "previousDay") warnings.push("Partir la veille");
@@ -164,7 +181,7 @@ function warningsFor(option: JourneyOption, request: SearchRequest) {
   }
 
   if (request.mode === "arriveBy") {
-    const target = zonedLocalToIso(request.date, request.time);
+    const target = zonedLocalToIso(request.date, request.time, targetTimeZone);
     const targetMs = new Date(target).getTime();
     const arrivalMs = new Date(option.destinationArrivalAt).getTime();
     if (arrivalMs > targetMs) {
@@ -190,8 +207,9 @@ function chooseBestRailLeg(legs: RailLeg[], targetIso: string) {
 function buildOptionFromRail(params: {
   station: Station;
   rail: RailLeg;
-  roadLeg: { distanceKm: number; durationMinutes: number };
+  roadLeg: RoadLeg;
   request: SearchRequest;
+  originTimeZone: string;
   directRoadKm: number;
   departureDay: JourneyOption["departureDay"];
 }): JourneyOption {
@@ -210,7 +228,7 @@ function buildOptionFromRail(params: {
     comfortableDepartureAt = addMinutes(recommendedDepartureAt, -COMFORT_EXTRA_MINUTES);
     stationArrivalAt = addMinutes(recommendedDepartureAt, params.roadLeg.durationMinutes);
   } else {
-    recommendedDepartureAt = zonedLocalToIso(params.request.date, params.request.time);
+    recommendedDepartureAt = zonedLocalToIso(params.request.date, params.request.time, params.originTimeZone);
     latestDepartureAt = recommendedDepartureAt;
     comfortableDepartureAt = recommendedDepartureAt;
     stationArrivalAt = addMinutes(recommendedDepartureAt, params.roadLeg.durationMinutes);
@@ -219,8 +237,7 @@ function buildOptionFromRail(params: {
   const impact = estimateImpact({
     carKm: params.roadLeg.distanceKm,
     railKm: params.rail.distanceKm,
-    directCarKm: params.directRoadKm,
-    vehicleType: params.request.vehicleType
+    directCarKm: params.directRoadKm
   });
 
   return {
@@ -248,8 +265,9 @@ function buildOptionFromRail(params: {
 async function evaluateStation(params: {
   candidate: StationCandidate;
   request: SearchRequest;
-  origin: NonNullable<ReturnType<typeof resolveKnownPlace>>;
-  destination: NonNullable<ReturnType<typeof resolveKnownPlace>>;
+  origin: Place;
+  destination: Place;
+  originTimeZone: string;
   road: RoadProvider;
   rail: RailProvider;
   directRoadKm: number;
@@ -259,6 +277,11 @@ async function evaluateStation(params: {
 }): Promise<JourneyOption[]> {
   const roadLeg = await params.road.route(params.origin, params.candidate.station);
   if (roadLeg.durationMinutes > params.candidate.allowedDriveMinutes) return [];
+
+  // V0.3.4 : une solution où l'on conduit déjà l'essentiel du trajet
+  // n'a pas d'intérêt multimodal. On écarte la gare avant même d'interroger
+  // le rail si l'accès voiture dépasse 60 % des kilomètres de la voiture seule.
+  if (params.directRoadKm > 0 && roadLeg.distanceKm > params.directRoadKm * MAX_DRIVE_DISTANCE_SHARE) return [];
 
   const railSearchAt = params.request.mode === "departAt"
     ? addMinutes(params.targetIso, roadLeg.durationMinutes + STATION_BUFFER_MINUTES)
@@ -282,6 +305,7 @@ async function evaluateStation(params: {
       rail: best,
       roadLeg,
       request: params.request,
+      originTimeZone: params.originTimeZone,
       directRoadKm: params.directRoadKm,
       departureDay: "requestedDay"
     })];
@@ -294,12 +318,13 @@ async function evaluateStation(params: {
     rail,
     roadLeg,
     request: params.request,
+    originTimeZone: params.originTimeZone,
     directRoadKm: params.directRoadKm,
     departureDay: "requestedDay"
   }));
 
-  const dayJ = provisional.filter((option) => parisDateKey(option.recommendedDepartureAt) === params.requestedDateKey);
-  const previous = provisional.filter((option) => parisDateKey(option.recommendedDepartureAt) === params.previousDateKey);
+  const dayJ = provisional.filter((option) => localDateKey(option.recommendedDepartureAt, params.originTimeZone) === params.requestedDateKey);
+  const previous = provisional.filter((option) => localDateKey(option.recommendedDepartureAt, params.originTimeZone) === params.previousDateKey);
 
   const selected: JourneyOption[] = [];
   if (dayJ.length) {
@@ -310,7 +335,7 @@ async function evaluateStation(params: {
   }
   if (previous.length) {
     const best = [...previous].sort((a, b) =>
-      a.rail.durationMinutes - b.rail.durationMinutes || a.totalMinutes - b.totalMinutes || a.rail.changes - b.rail.changes
+      a.totalMinutes - b.totalMinutes || a.rail.durationMinutes - b.rail.durationMinutes || a.rail.changes - b.rail.changes
     )[0];
     selected.push({ ...best, departureDay: "previousDay" });
   }
@@ -325,7 +350,8 @@ function mergeRecommendation(
   option: JourneyOption,
   criterion: RecommendationCriterion,
   rank: RecommendationRank,
-  request: SearchRequest
+  request: SearchRequest,
+  targetTimeZone: string
 ) {
   // Une même gare peut être classée dans plusieurs critères/rangs. On garde
   // une seule carte par gare et par jour, avec tous ses badges de classement.
@@ -335,7 +361,7 @@ function mergeRecommendation(
       existing.labels.push({ criterion, rank });
     }
     existing.labels.sort((a, b) => a.rank - b.rank || a.criterion.localeCompare(b.criterion));
-    existing.warnings = warningsFor(existing, request);
+    existing.warnings = warningsFor(existing, request, targetTimeZone);
     return;
   }
 
@@ -345,7 +371,7 @@ function mergeRecommendation(
     labels: [{ criterion, rank }],
     warnings: []
   };
-  merged.warnings = warningsFor(merged, request);
+  merged.warnings = warningsFor(merged, request, targetTimeZone);
   result.push(merged);
 }
 
@@ -353,14 +379,15 @@ function addTopThree(
   result: JourneyOption[],
   ranked: JourneyOption[],
   criterion: RecommendationCriterion,
-  request: SearchRequest
+  request: SearchRequest,
+  targetTimeZone: string
 ) {
   ranked.slice(0, 3).forEach((option, index) => {
-    mergeRecommendation(result, option, criterion, (index + 1) as RecommendationRank, request);
+    mergeRecommendation(result, option, criterion, (index + 1) as RecommendationRank, request, targetTimeZone);
   });
 }
 
-function summarizeDay(options: JourneyOption[], request: SearchRequest) {
+function summarizeDay(options: JourneyOption[], request: SearchRequest, targetTimeZone: string) {
   if (!options.length) return [];
 
   const result: JourneyOption[] = [];
@@ -373,7 +400,8 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
       a.totalMinutes - b.totalMinutes
     ),
     "closestStation",
-    request
+    request,
+    targetTimeZone
   );
 
   const withinLimit = options.filter((option) => option.drive.durationMinutes <= request.maxDriveMinutes);
@@ -386,7 +414,8 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
         a.totalMinutes - b.totalMinutes
       ),
       "fastestRailWithinLimit",
-      request
+      request,
+      targetTimeZone
     );
   }
 
@@ -400,7 +429,8 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
         a.drive.durationMinutes - b.drive.durationMinutes
       ),
       "fastestRailExtended",
-      request
+      request,
+      targetTimeZone
     );
   }
 
@@ -412,7 +442,8 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
       a.drive.durationMinutes - b.drive.durationMinutes
     ),
     "fastestTotal",
-    request
+    request,
+    targetTimeZone
   );
 
   // Les cartes ayant un meilleur classement global apparaissent en premier.
@@ -420,6 +451,54 @@ function summarizeDay(options: JourneyOption[], request: SearchRequest) {
     const bestRankA = Math.min(...a.labels.map((label) => label.rank));
     const bestRankB = Math.min(...b.labels.map((label) => label.rank));
     return bestRankA - bestRankB || b.labels.length - a.labels.length || a.totalMinutes - b.totalMinutes;
+  });
+}
+
+function longestTransfer(option: JourneyOption) {
+  const values = option.rail.transfers?.map((transfer) => transfer.durationMinutes) ?? [];
+  return values.length ? Math.max(...values) : 0;
+}
+
+function keepSensiblePreviousDayOptions(
+  previous: JourneyOption[],
+  requestedDay: JourneyOption[],
+  directRoad: RoadLeg
+) {
+  if (!previous.length) return [];
+
+  const absoluteCeiling = Math.max(24 * 60, Math.round(directRoad.durationMinutes * 2.2 + 240));
+  const base = previous.filter((option) => option.totalMinutes <= absoluteCeiling);
+  if (!requestedDay.length) return base;
+
+  const bestDayTotal = Math.min(...requestedDay.map((option) => option.totalMinutes));
+  const relativeCeiling = Math.max(bestDayTotal + 8 * 60, Math.round(bestDayTotal * 1.75));
+
+  return base.filter((option) => {
+    const meaningfulDriveSaving = requestedDay.some((day) =>
+      day.drive.durationMinutes - option.drive.durationMinutes >= 60
+    );
+    const meaningfulRailSaving = requestedDay.some((day) =>
+      day.rail.durationMinutes - option.rail.durationMinutes >= 90
+    );
+
+    if (option.totalMinutes > relativeCeiling && !meaningfulDriveSaving && !meaningfulRailSaving) {
+      return false;
+    }
+
+    // Écarte les nuits entières passées en correspondance lorsqu’une bonne option
+    // le jour J existe déjà, sauf si la veille apporte un vrai gain ailleurs.
+    if (longestTransfer(option) > 8 * 60 && !meaningfulDriveSaving && !meaningfulRailSaving) {
+      return false;
+    }
+
+    const dominated = requestedDay.some((day) =>
+      day.totalMinutes <= option.totalMinutes &&
+      day.drive.durationMinutes <= option.drive.durationMinutes + 15 &&
+      day.rail.durationMinutes <= option.rail.durationMinutes &&
+      day.rail.changes <= option.rail.changes
+    );
+
+    return !dominated || meaningfulDriveSaving || meaningfulRailSaving;
   });
 }
 
@@ -433,22 +512,69 @@ function simplePareto(options: JourneyOption[]) {
 }
 
 export async function searchMultimodal(request: SearchRequest): Promise<SearchResponse> {
-  const origin = resolveKnownPlace(request.origin);
-  const destination = resolveKnownPlace(request.destination);
-  if (!origin || !destination) throw new Error("DEMO_PLACE_NOT_FOUND");
+  const contact = transitousContact();
+  const locationProvider = contact ? new TransitousLocationProvider(contact) : null;
+
+  let origin: Place | null = request.originPlace ?? null;
+  let destination: Place | null = request.destinationPlace ?? null;
+  const notes: string[] = [];
+
+  // V0.3.2 : les coordonnées sélectionnées dans l'autocomplétion sont la source
+  // de vérité. Le géocodage texte reste seulement un filet de sécurité interne.
+  if (locationProvider && (!origin || !destination)) {
+    const resolved = await Promise.allSettled([
+      origin ? Promise.resolve(origin) : locationProvider.resolvePlace(request.origin),
+      destination ? Promise.resolve(destination) : locationProvider.resolvePlace(request.destination)
+    ]);
+    if (resolved[0].status === "fulfilled") origin = resolved[0].value;
+    if (resolved[1].status === "fulfilled") destination = resolved[1].value;
+  }
+
+  // Fallback utile si Transitous est temporairement indisponible : les anciens
+  // lieux de démonstration continuent de fonctionner.
+  origin ??= resolveKnownPlace(request.origin);
+  destination ??= resolveKnownPlace(request.destination);
+  if (!origin) throw new Error("PLACE_NOT_FOUND_ORIGIN");
+  if (!destination) throw new Error("PLACE_NOT_FOUND_DESTINATION");
+
+  const originTimeZone = origin.timeZone || "Europe/Paris";
+  const destinationTimeZone = destination.timeZone || originTimeZone;
+  const targetTimeZone = request.mode === "arriveBy" ? destinationTimeZone : originTimeZone;
 
   const { road, rail, roadLive, railLive, roadName, railName } = providers(destination.countryCode);
   const directRoad = await road.route(origin, destination);
-  const targetIso = zonedLocalToIso(request.date, request.time);
+  const targetIso = zonedLocalToIso(request.date, request.time, targetTimeZone);
   const requestedDate = request.date;
-  const prevDate = previousDateKey(request);
-  const candidates = analysisCandidates(origin, destination);
+  const prevDate = previousDateKey(request, originTimeZone);
+
+  let discoveredStations: Station[] = [];
+  if (locationProvider) {
+    try {
+      discoveredStations = await locationProvider.discoverRailStations(origin, destination);
+      notes.push(`${discoveredStations.length} gares ferroviaires découvertes dynamiquement autour du départ et le long du corridor.`);
+    } catch (error) {
+      console.error("Échec de découverte dynamique des gares:", error);
+      notes.push("La découverte dynamique des gares a rencontré une erreur ; les gares de secours disponibles ont été utilisées.");
+    }
+  }
+
+  // La liste statique n'est plus le moteur principal. Elle ne sert que de filet
+  // de sécurité pour les tests historiques si l'API de découverte retourne peu de gares.
+  const stationPool = new Map<string, Station>();
+  for (const station of discoveredStations) stationPool.set(station.id, station);
+  if (stationPool.size < 6) {
+    for (const station of STATIONS) stationPool.set(station.id, station);
+  }
+
+  const candidates = analysisCandidates(origin, destination, [...stationPool.values()]);
+  if (!candidates.length) throw new Error("NO_RAIL_STATIONS_FOUND");
 
   const settled = await Promise.allSettled(candidates.map((candidate) => evaluateStation({
     candidate,
     request,
     origin,
     destination,
+    originTimeZone,
     road,
     rail,
     directRoadKm: directRoad.distanceKm,
@@ -468,30 +594,45 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     }
   });
 
-  const requestedDayOptions = rawOptions.filter((option) => option.departureDay === "requestedDay");
-  const previousDayOptions = rawOptions.filter((option) => option.departureDay === "previousDay");
+  // V0.3.4 : double garde-fou d'intérêt pratique.
+  // 1) pas plus de 60 % des kilomètres du trajet voiture effectués en voiture ;
+  // 2) pas plus de 150 % du temps du trajet voiture en porte-à-porte.
+  const maxMultimodalMinutes = Math.round(directRoad.durationMinutes * MAX_MULTIMODAL_VS_CAR_RATIO);
+  const maxDriveDistanceKm = directRoad.distanceKm * MAX_DRIVE_DISTANCE_SHARE;
+  const distanceEligibleOptions = rawOptions.filter((option) => option.drive.distanceKm <= maxDriveDistanceKm);
+  const filteredByDriveShareCount = rawOptions.length - distanceEligibleOptions.length;
+  const eligibleOptions = distanceEligibleOptions.filter((option) => option.totalMinutes <= maxMultimodalMinutes);
+  const filteredByCarRatioCount = distanceEligibleOptions.length - eligibleOptions.length;
+
+  const requestedDayOptions = eligibleOptions.filter((option) => option.departureDay === "requestedDay");
+  const rawPreviousDayOptions = eligibleOptions.filter((option) => option.departureDay === "previousDay");
+  const previousDayOptions = keepSensiblePreviousDayOptions(rawPreviousDayOptions, requestedDayOptions, directRoad);
   const summarized = [
-    ...summarizeDay(requestedDayOptions, request),
-    ...summarizeDay(previousDayOptions, request)
+    ...summarizeDay(requestedDayOptions, request, targetTimeZone),
+    ...summarizeDay(previousDayOptions, request, targetTimeZone)
   ];
 
   const mode: SearchResponse["mode"] = roadLive && railLive ? "live" : roadLive || railLive ? "hybrid" : "demo";
-  const notes: string[] = [];
-  if (railLive && destination.countryCode && destination.countryCode !== "FR") {
-    notes.push("Horaires ferroviaires réels fournis par Transitous/MOTIS (données publiques européennes).");
-  }
-  if (!roadLive) notes.push("Temps voiture encore simulés : ajoutez GOOGLE_MAPS_API_KEY dans Vercel pour activer Google Routes.");
+  if (railLive) notes.push("Horaires ferroviaires fournis par Transitous/MOTIS ; la couverture dépend des données publiques disponibles localement.");
+  if (!roadLive) notes.push("Temps voiture simulés : ajoutez GOOGLE_MAPS_API_KEY dans Vercel pour activer Google Routes.");
   else notes.push("Temps voiture calculés par Google Routes.");
 
   const uniqueFailures = [...new Set(failures)];
   if (uniqueFailures.length) notes.push(`${uniqueFailures.length} recherche(s) de gare ont échoué côté API : ${uniqueFailures.join(", ")}.`);
 
+  notes.push("La recherche autorise train, RER, métro, tram et bus dans les correspondances, avec au moins un segment ferroviaire obligatoire.");
+  notes.push("Les options dont l'accès en voiture dépasse 60 % des kilomètres du trajet 100 % voiture sont automatiquement masquées.");
+  if (filteredByDriveShareCount > 0) notes.push(`${filteredByDriveShareCount} option(s) ont été écartées car la voiture représentait plus de 60 % de la distance du trajet voiture seul.`);
+  notes.push("Les options dont le temps porte-à-porte dépasse 150 % du temps du trajet 100 % voiture sont automatiquement masquées.");
+  if (filteredByCarRatioCount > 0) notes.push(`${filteredByCarRatioCount} option(s) ont été écartées par le plafond de 150 % du temps voiture.`);
+  notes.push("La recherche essaie d’abord jusqu’à 3 correspondances et peut élargir automatiquement jusqu’à 5 si aucune solution n’est trouvée.");
   notes.push("Les trois meilleurs candidats de chaque critère sont conservés : gare la plus proche, train le plus court dans le périmètre, train le plus court avec conduite étendue, et trajet porte-à-porte le plus court.");
-  if (request.mode === "arriveBy") notes.push("Les mêmes critères sont affichés séparément pour un départ le jour J et pour un départ la veille lorsqu'une solution existe.");
-  notes.push(`Les gares peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
-  notes.push("Les coûts et le CO₂ restent des estimations dans cette version. La comparaison 100 % voiture utilise le même provider routier que les accès aux gares.");
+  if (request.mode === "arriveBy") notes.push("La veille n’est affichée que si elle reste raisonnable ou apporte un avantage réel par rapport aux solutions du jour J ; les trajets dominés ou avec attentes nocturnes absurdes sont masqués.");
+  notes.push(`Les gares candidates peuvent être testées jusqu'à ${compactDuration(MAX_EXTENDED_DRIVE_MINUTES)} de voiture pour la catégorie avec extension.`);
+  notes.push(`Fuseaux détectés : départ ${originTimeZone} · destination ${destinationTimeZone}.`);
+  notes.push("Les coûts et le CO₂ restent des estimations basées sur une voiture moyenne ; le type de véhicule n’intervient plus dans le choix d’itinéraire. La comparaison 100 % voiture utilise le même provider routier que les accès aux gares.");
 
-  const uniqueViableStations = new Set(rawOptions.map((option) => option.station.id)).size;
+  const uniqueViableStations = new Set(eligibleOptions.map((option) => option.station.id)).size;
 
   return {
     mode,
@@ -501,8 +642,9 @@ export async function searchMultimodal(request: SearchRequest): Promise<SearchRe
     directCar: directRoad,
     options: summarized,
     viableStationCount: uniqueViableStations,
-    paretoStationCount: simplePareto(rawOptions).length,
-    usedMaxTransfers: MAX_AUTO_TRANSFERS,
+    candidateStationCount: candidates.length,
+    paretoStationCount: simplePareto(eligibleOptions).length,
+    usedMaxTransfers: MAX_FALLBACK_TRANSFERS,
     providers: {
       road: { name: roadName, live: roadLive },
       rail: { name: railName, live: railLive }

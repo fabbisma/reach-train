@@ -6,6 +6,7 @@ type TransitousPlace = {
   name?: string;
   lat?: number;
   lon?: number;
+  tz?: string;
 };
 
 type TransitousLeg = {
@@ -38,7 +39,7 @@ type TransitousResponse = {
   itineraries?: TransitousItinerary[];
 };
 
-const RAIL_MODES = new Set([
+const RAIL_CORE_MODES = new Set([
   "RAIL",
   "HIGHSPEED_RAIL",
   "LONG_DISTANCE",
@@ -48,6 +49,18 @@ const RAIL_MODES = new Set([
   "SUBURBAN",
   "SUBWAY"
 ]);
+
+const PUBLIC_TRANSIT_MODES = new Set([
+  ...RAIL_CORE_MODES,
+  "TRAM",
+  "BUS",
+  "COACH",
+  "FERRY",
+  "FUNICULAR",
+  "AERIAL_LIFT"
+]);
+
+const TRANSIT_MODE_QUERY = "RAIL,TRAM,BUS,COACH,FERRY,FUNICULAR,AERIAL_LIFT";
 
 
 function decodePolyline(encoded: string, precision = 6): Array<{ lat: number; lng: number }> {
@@ -97,6 +110,7 @@ function railSegments(railLegs: TransitousLeg[]): RailSegment[] {
     const departureAt = new Date(leg.startTime).toISOString();
     const arrivalAt = new Date(leg.endTime).toISOString();
     return [{
+      mode: leg.mode,
       fromStation: leg.from?.name?.trim() || "Gare de départ",
       toStation: leg.to?.name?.trim() || "Gare d’arrivée",
       departureAt,
@@ -108,6 +122,8 @@ function railSegments(railLegs: TransitousLeg[]): RailSegment[] {
       toLat: leg.to?.lat,
       toLng: leg.to?.lon,
       realtime: leg.realTime === true,
+      fromTimeZone: leg.from?.tz,
+      toTimeZone: leg.to?.tz,
       geometry: leg.legGeometry?.points
         ? decodePolyline(leg.legGeometry.points, leg.legGeometry.precision ?? 6)
         : undefined
@@ -133,7 +149,8 @@ function transferDetails(railLegs: TransitousLeg[]): RailTransfer[] {
       departureAt: new Date(next.startTime).toISOString(),
       durationMinutes,
       fromService: serviceName(previous),
-      toService: serviceName(next)
+      toService: serviceName(next),
+      timeZone: previous.to?.tz || next.from?.tz
     });
   }
   return details;
@@ -150,15 +167,21 @@ export class TransitousRailProvider implements RailProvider {
     maxTransfers: number;
   }): Promise<TransitousItinerary[]> {
     const query = new URLSearchParams({
-      fromPlace: `${params.station.lat},${params.station.lng}`,
-      toPlace: `${params.destination.lat},${params.destination.lng}`,
+      fromPlace: params.station.providerStopId || `${params.station.lat},${params.station.lng}`,
+      toPlace: params.destination.sourceType === "STOP" && params.destination.sourceId
+        ? params.destination.sourceId
+        : `${params.destination.lat},${params.destination.lng}`,
+      radius: "6000",
       time: params.searchAt,
       arriveBy: params.mode === "arriveBy" ? "true" : "false",
-      transitModes: "RAIL",
+      transitModes: TRANSIT_MODE_QUERY,
       directModes: "",
+      preTransitModes: "WALK",
+      postTransitModes: "WALK",
+      maxPreTransitTime: "1200",
+      maxPostTransitTime: "3600",
       maxTransfers: String(params.maxTransfers),
       timetableView: "false",
-      radius: "350",
       detailedLegs: "true",
       joinInterlinedLegs: "true",
       language: "fr"
@@ -166,7 +189,7 @@ export class TransitousRailProvider implements RailProvider {
 
     const response = await fetch(`https://api.transitous.org/api/v6/plan?${query.toString()}`, {
       headers: {
-        "User-Agent": `EcoRailPlanner/0.2.8 (${this.contact})`
+        "User-Agent": `EcoRailPlanner/0.3.5 (${this.contact})`
       },
       cache: "no-store",
       signal: AbortSignal.timeout(20_000)
@@ -195,28 +218,50 @@ export class TransitousRailProvider implements RailProvider {
     mode: "arriveBy" | "departAt";
     maxTransfers: number;
   }): Promise<RailLeg[]> {
-    const itineraries = await this.fetchItineraries(params);
+    let itineraries = await this.fetchItineraries(params);
+    // Pour la Global Beta, 3 correspondances restent la recherche normale.
+    // Si aucune solution n'est trouvée, on élargit automatiquement à 5 plutôt
+    // que de conclure trop vite qu'un trajet ferroviaire n'existe pas.
+    if (!itineraries.length && params.maxTransfers < 5) {
+      itineraries = await this.fetchItineraries({ ...params, maxTransfers: 5 });
+    }
 
     return itineraries
-      .map((itinerary) => {
-        const trainLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && RAIL_MODES.has(leg.mode));
+      .flatMap((itinerary): RailLeg[] => {
+        const transitLegs = (itinerary.legs ?? []).filter((leg) => leg.mode && PUBLIC_TRANSIT_MODES.has(leg.mode));
+        // L’app reste un planificateur voiture + rail : on autorise métro, tram et bus
+        // pour les correspondances / le dernier kilomètre, mais on exige au moins
+        // un segment ferroviaire dans l’itinéraire.
+        if (!transitLegs.some((leg) => leg.mode && RAIL_CORE_MODES.has(leg.mode))) return [];
+
         const services = [...new Set(
-          trainLegs
+          transitLegs
             .map((leg) => serviceName(leg))
             .filter((value): value is string => Boolean(value))
         )].slice(0, 5);
 
-        return {
+        const lastTransitLeg = transitLegs[transitLegs.length - 1];
+        const lastTransitPlace = lastTransitLeg?.to;
+        const lastMileDistanceKm = lastTransitPlace?.lat != null && lastTransitPlace?.lon != null
+          ? Math.round(haversineKm(
+              { lat: lastTransitPlace.lat, lng: lastTransitPlace.lon },
+              params.destination
+            ) * 10) / 10
+          : undefined;
+
+        return [{
           distanceKm: Math.round(haversineKm(params.station, params.destination) * 1.08 * 10) / 10,
           durationMinutes: Math.max(1, Math.round(itinerary.duration / 60)),
           departureAt: new Date(itinerary.startTime).toISOString(),
           arrivalAt: new Date(itinerary.endTime).toISOString(),
           changes: Math.max(0, itinerary.transfers),
           services,
-          realtime: trainLegs.some((leg) => leg.realTime === true),
-          transfers: transferDetails(trainLegs),
-          segments: railSegments(trainLegs)
-        } satisfies RailLeg;
+          realtime: transitLegs.some((leg) => leg.realTime === true),
+          transfers: transferDetails(transitLegs),
+          segments: railSegments(transitLegs),
+          lastTransitStopName: lastTransitPlace?.name?.trim(),
+          lastMileDistanceKm
+        } satisfies RailLeg];
       })
       .sort((a, b) =>
         a.durationMinutes - b.durationMinutes ||

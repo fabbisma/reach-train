@@ -1,6 +1,4 @@
 export type SearchMode = "arriveBy" | "departAt";
-export type VehicleType = "electric" | "thermal";
-
 export type LatLng = {
   lat: number;
   lng: number;
@@ -9,22 +7,37 @@ export type LatLng = {
 export type Place = LatLng & {
   name: string;
   countryCode?: string;
+  timeZone?: string;
+  sourceId?: string;
+  sourceType?: "ADDRESS" | "PLACE" | "STOP";
+};
+
+export type LocationSuggestion = {
+  id: string;
+  label: string;
+  secondaryLabel?: string;
+  type: "ADDRESS" | "PLACE" | "STOP";
+  provider?: "google" | "transitous";
+  place?: Place;
 };
 
 export type Station = LatLng & {
   id: string;
   name: string;
   importance: number;
+  timeZone?: string;
+  providerStopId?: string;
 };
 
 export type SearchRequest = {
   origin: string;
   destination: string;
+  originPlace?: Place;
+  destinationPlace?: Place;
   date: string;
   time: string;
   mode: SearchMode;
   maxDriveMinutes: number;
-  vehicleType: VehicleType;
 };
 
 export type RoadLeg = {
@@ -40,9 +53,11 @@ export type RailTransfer = {
   durationMinutes: number;
   fromService?: string;
   toService?: string;
+  timeZone?: string;
 };
 
 export type RailSegment = {
+  mode?: string;
   fromStation: string;
   toStation: string;
   departureAt: string;
@@ -55,6 +70,8 @@ export type RailSegment = {
   toLng?: number;
   realtime?: boolean;
   geometry?: LatLng[];
+  fromTimeZone?: string;
+  toTimeZone?: string;
 };
 
 export type RailLeg = {
@@ -67,6 +84,8 @@ export type RailLeg = {
   realtime?: boolean;
   transfers?: RailTransfer[];
   segments?: RailSegment[];
+  lastTransitStopName?: string;
+  lastMileDistanceKm?: number;
 };
 
 export type RecommendationCriterion = "closestStation" | "fastestRailWithinLimit" | "fastestRailExtended" | "fastestTotal";
@@ -120,6 +139,7 @@ export type SearchResponse = {
   directCar: RoadLeg;
   options: JourneyOption[];
   viableStationCount: number;
+  candidateStationCount: number;
   paretoStationCount: number;
   usedMaxTransfers: number;
   providers: {
